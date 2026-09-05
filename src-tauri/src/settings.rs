@@ -57,6 +57,12 @@ pub struct Settings {
     /// 메모함 편집 칸 전용. 옛 settings.json에는 없으므로 serde default로 채운다.
     #[serde(default = "default_box_font_size")]
     pub box_font_size: u32,
+    /// 최근 쓴 색(최신이 앞, 최대 10). 목록 관리는 프런트가 한다 — 여기서는 그대로 담아 둔다.
+    #[serde(default)]
+    pub recent_colors: Vec<String>,
+    /// 즐겨찾는 색(최대 10). 마찬가지로 프런트가 관리한다.
+    #[serde(default)]
+    pub favorite_colors: Vec<String>,
     #[serde(default)]
     pub data_dir: Option<String>,
 }
@@ -71,6 +77,8 @@ impl Default for Settings {
             default_color: DEFAULT_COLOR.to_string(),
             default_font_size: DEFAULT_FONT_SIZE,
             box_font_size: DEFAULT_BOX_FONT_SIZE,
+            recent_colors: Vec::new(),
+            favorite_colors: Vec::new(),
             data_dir: None,
         }
     }
@@ -94,6 +102,10 @@ pub struct SettingsPatch {
     pub default_font_size: Option<u32>,
     #[serde(default)]
     pub box_font_size: Option<u32>,
+    #[serde(default)]
+    pub recent_colors: Option<Vec<String>>,
+    #[serde(default)]
+    pub favorite_colors: Option<Vec<String>>,
     #[serde(default, deserialize_with = "double_option")]
     pub data_dir: Option<Option<String>>,
 }
@@ -181,6 +193,28 @@ mod tests {
         let s: Settings = serde_json::from_str(old).unwrap();
         assert_eq!(s.box_font_size, DEFAULT_BOX_FONT_SIZE);
         assert_eq!(s.default_font_size, 17);
+    }
+
+    /// recent_colors / favorite_colors가 없던 시절의 settings.json은 빈 배열로 시작한다.
+    #[test]
+    fn old_settings_file_gets_empty_color_lists() {
+        let old = r##"{
+            "shortcut_enabled": true,
+            "shortcut": "CommandOrControl+Shift+N",
+            "autostart": false,
+            "theme": "light",
+            "default_color": "#FFF4A3",
+            "default_font_size": 15,
+            "box_font_size": 14,
+            "data_dir": null
+        }"##;
+        let s: Settings = serde_json::from_str(old).unwrap();
+        assert!(s.recent_colors.is_empty());
+        assert!(s.favorite_colors.is_empty());
+
+        let p: SettingsPatch = serde_json::from_str(r##"{"recent_colors": ["#123456"]}"##).unwrap();
+        assert_eq!(p.recent_colors.as_deref(), Some(&["#123456".to_string()][..]));
+        assert!(p.favorite_colors.is_none());
     }
 
     #[test]

@@ -250,6 +250,12 @@ pub fn update_settings(
         if let Some(v) = patch.box_font_size {
             s.box_font_size = v;
         }
+        if let Some(v) = patch.recent_colors {
+            s.recent_colors = v;
+        }
+        if let Some(v) = patch.favorite_colors {
+            s.favorite_colors = v;
+        }
         settings::save(&app, &s)?;
     }
 

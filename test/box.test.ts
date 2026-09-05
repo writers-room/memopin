@@ -65,6 +65,8 @@ const SETTINGS: Settings = {
   default_color: '#FFF4A3',
   default_font_size: 15,
   box_font_size: 14,
+  recent_colors: [],
+  favorite_colors: [],
   data_dir: null,
 };
 
@@ -535,6 +537,31 @@ describe('mountBox', () => {
     await flush();
     expect(api.createNote).toHaveBeenCalledWith({ category_id: 'c1' });
     expect(api.openNoteWindow).toHaveBeenCalledWith('n9');
+    expect(root.querySelector('.list .item.sel')?.getAttribute('data-id')).toBe('n9');
+  });
+
+  it('우클릭 복제는 같은 내용의 메모를 만들고 그것을 고른다(창은 열지 않는다)', async () => {
+    mountBox(root);
+    await flush();
+    const copy = note({ id: 'n9', text: '둘째', html: '<p>둘째</p>', category_id: 'c1', favorite: true });
+    api.createNote.mockResolvedValue(copy);
+    notes.push(copy);
+
+    root.querySelector<HTMLElement>('.list .item[data-id=n2]')!
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    document
+      .querySelector<HTMLElement>('.cmenu [data-action="duplicate"]')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flush();
+
+    expect(api.createNote).toHaveBeenCalledWith({
+      color: '#FFF4A3',
+      category_id: 'c1',
+      favorite: true,
+      html: '<p>둘째</p>',
+      text: '둘째',
+    });
+    expect(api.openNoteWindow).not.toHaveBeenCalled();
     expect(root.querySelector('.list .item.sel')?.getAttribute('data-id')).toBe('n9');
   });
 });

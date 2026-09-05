@@ -29,18 +29,25 @@ body { background: var(--n-bg); color: var(--n-ink); }
 .note-bar:active { cursor: grabbing; }
 .nb-spacer { flex: 1; align-self: stretch; }
 
+/*
+ * 쉼(마우스가 메모 밖)에서는 걸려 있는 것만 남기고 나머지 버튼은 display:none으로 자리째
+ * 접는다. opacity:0로 숨기면 빈 자리가 남아 "핀 없이 즐겨찾기만" 한 메모의 별이 왼쪽 끝으로
+ * 오지 못한다. 색은 --n-ink뿐이다. 금색(--star)은 메모함 목록의 것이고 메모 색 위에서는 튄다.
+ */
 .nb {
-  width: 20px; height: 20px; flex: none; border-radius: 4px; display: grid; place-items: center;
-  opacity: 0; transition: opacity .15s, background .12s; color: var(--n-ink);
+  width: 20px; height: 20px; flex: none; border-radius: 4px; display: none; place-items: center;
+  opacity: .72; transition: opacity .15s, background .12s; color: var(--n-ink);
 }
-.note:hover .nb { opacity: .72; }
+.note:hover .nb { display: grid; }
 .nb:hover { opacity: 1 !important; background: rgba(0, 0, 0, .08); }
-.note.pinned .nb.pin { opacity: 1; }
+.note.pinned .nb.pin,
+.note.favorite .nb.star { display: grid; opacity: 1; }
 .nb svg {
   width: 16px; height: 16px; fill: none; stroke: currentColor;
   stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
 }
 .note.pinned .nb.pin svg path.fill { fill: currentColor; }
+.note.favorite .nb.star svg path { fill: currentColor; }
 
 /* tokens.css가 body에 user-select:none을 걸어 두므로 본문만 되돌린다. */
 .note .editor { flex: 1; overflow: auto; padding: 0 14px 14px; user-select: text; }

@@ -791,6 +791,22 @@ export function mountBox(root: HTMLElement): void {
         return patch(note.id, { list_pinned: !note.list_pinned });
       case 'category':
         return patch(note.id, { category_id: action.category_id });
+      case 'duplicate':
+        // 같은 내용의 새 메모. 창은 열지 않고 목록에서 그것을 고른다.
+        try {
+          const copy = await createNote({
+            color: note.color,
+            category_id: note.category_id,
+            favorite: note.favorite,
+            html: note.html,
+            text: note.text,
+          });
+          notes = [...notes, copy];
+          select(copy.id);
+        } catch (e) {
+          fail(e);
+        }
+        return;
       case 'toggle':
         try {
           await (note.is_open ? closeNoteWindow(note.id) : openNoteWindow(note.id));

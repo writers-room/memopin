@@ -28,6 +28,8 @@ const SETTINGS: Settings = {
   default_color: '#FFF4A3',
   default_font_size: 15,
   box_font_size: 14,
+  recent_colors: [],
+  favorite_colors: [],
   data_dir: 'D:\\Drive\\memopin',
 };
 

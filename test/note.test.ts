@@ -25,6 +25,10 @@ vi.mock('../src/api.ts', () => ({
   showBox: vi.fn(),
   listCategories: vi.fn(),
   onStoreChanged: vi.fn(),
+  // 우클릭 메뉴가 최근·즐겨찾는 색을 설정에서 읽는다.
+  getSettings: vi.fn(),
+  updateSettings: vi.fn(),
+  onSettingsChanged: vi.fn(),
 }));
 
 import * as api from '../src/api.ts';
@@ -129,14 +133,15 @@ describe('affectsNote / isOwnChange', () => {
 });
 
 describe('mountNote', () => {
-  it('띠에 드래그 영역과 버튼 셋을 둔다', async () => {
+  it('띠에 드래그 영역과 버튼 넷을 둔다', async () => {
     await mount();
     const bar = root.querySelector('.note-bar');
     expect(bar).not.toBeNull();
     expect(bar?.hasAttribute('data-tauri-drag-region')).toBe(true);
-    expect(root.querySelectorAll('.note-bar .nb').length).toBe(3);
+    expect(root.querySelectorAll('.note-bar .nb').length).toBe(4);
     expect(root.querySelector('.nb.new')).not.toBeNull();
     expect(root.querySelector('.nb.pin')).not.toBeNull();
+    expect(root.querySelector('.nb.star')).not.toBeNull();
     expect(root.querySelector('.nb.close')).not.toBeNull();
     // 버튼에는 드래그 영역을 주지 않는다. 눌러도 창이 끌려가면 안 된다.
     root.querySelectorAll('.nb').forEach((b) => {
@@ -164,11 +169,34 @@ describe('mountNote', () => {
     expect(ed.style.getPropertyValue('--fs')).toBe('18px');
   });
 
+  // 순서가 곧 화면이다. 쉼에서 접히지 않은 것만 남으므로 핀이 없으면 별이 왼쪽 끝이 된다.
+  it('띠 버튼은 핀·별·새 메모·닫기 순이다', async () => {
+    await mount();
+    const order = [...root.querySelectorAll('.note-bar .nb')].map((b) =>
+      [...b.classList].filter((c) => c !== 'nb').join(''),
+    );
+    expect(order).toEqual(['pin', 'star', 'new', 'close']);
+  });
+
   it('📌를 누르면 always_on_top을 뒤집어 저장하고 pinned 클래스를 건다', async () => {
     await mount();
     root.querySelector<HTMLElement>('.nb.pin')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(api.updateNote).toHaveBeenCalledWith(ID, { always_on_top: true });
     expect(root.classList.contains('pinned')).toBe(true);
+  });
+
+  it('★을 누르면 favorite을 뒤집어 저장하고 favorite 클래스를 건다', async () => {
+    await mount();
+    expect(root.classList.contains('favorite')).toBe(false);
+    root.querySelector<HTMLElement>('.nb.star')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(api.updateNote).toHaveBeenCalledWith(ID, { favorite: true });
+    expect(root.classList.contains('favorite')).toBe(true);
+  });
+
+  it('즐겨찾기로 열면 처음부터 favorite 클래스가 붙어 있다', async () => {
+    vi.mocked(api.getNote).mockResolvedValue(makeNote({ favorite: true }));
+    await mount();
+    expect(root.classList.contains('favorite')).toBe(true);
   });
 
   it('＋는 같은 색·같은 카테고리로 새 메모를 만들고 창을 연다', async () => {
@@ -286,6 +314,22 @@ describe('mountNote', () => {
     expect(ed.innerHTML).toBe('<p>처음</p>');
   });
 
+  it('바깥에서 favorite이 바뀌면 클래스가 따라온다', async () => {
+    vi.mocked(api.getNote).mockResolvedValue(makeNote({ favorite: true }));
+    await mount();
+    expect(root.classList.contains('favorite')).toBe(true);
+
+    vi.mocked(api.getNote).mockResolvedValue(makeNote({ favorite: false }));
+    changed!({ kind: 'notes', ids: [ID], source: 'box' });
+    await flush();
+    expect(root.classList.contains('favorite')).toBe(false);
+
+    vi.mocked(api.getNote).mockResolvedValue(makeNote({ favorite: true }));
+    changed!({ kind: 'notes', ids: [ID], source: 'fs' });
+    await flush();
+    expect(root.classList.contains('favorite')).toBe(true);
+  });
+
   it('내 메모가 아닌 이벤트와 삭제·읽기 실패는 흘려보낸다', async () => {
     await mount();
     vi.mocked(api.getNote).mockClear();
@@ -339,7 +383,7 @@ describe('우클릭 메뉴', () => {
     expect(api.updateNote).toHaveBeenCalledExactlyOnceWith(ID, { color: '#DDF5B0' });
   });
 
-  it('즐겨찾기·카테고리·메모함 보기·삭제를 각각 넘긴다', async () => {
+  it('고정·카테고리·메모함 보기·삭제를 각각 넘긴다', async () => {
     await mount();
     const open = (): Element => {
       root.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
@@ -349,11 +393,9 @@ describe('우클릭 메뉴', () => {
       open().querySelector<HTMLElement>(sel)!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     };
 
-    click('[data-action="favorite"]');
-    expect(api.updateNote).toHaveBeenCalledWith(ID, { favorite: true });
-
-    click('[data-action="list_pinned"]');
-    expect(api.updateNote).toHaveBeenCalledWith(ID, { list_pinned: true });
+    // 즐겨찾기·목록 상단 고정은 메모 창 메뉴에서 빠졌다(별은 띠로, 목록 고정은 메모함으로).
+    click('[data-action="always_on_top"]');
+    expect(api.updateNote).toHaveBeenCalledWith(ID, { always_on_top: true });
 
     click('[data-category="c1"]');
     expect(api.updateNote).toHaveBeenCalledWith(ID, { category_id: 'c1' });

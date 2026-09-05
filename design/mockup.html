@@ -74,12 +74,15 @@ input,select{font:inherit}
 .note-bar{height:22px;flex:none;background:transparent;display:flex;align-items:center;padding:0 3px;cursor:grab;user-select:none;transition:background .15s}
 .note:hover .note-bar{background:rgba(0,0,0,.06)}
 .note-bar:active{cursor:grabbing}
-.nb{width:20px;height:20px;border-radius:4px;display:grid;place-items:center;opacity:0;transition:opacity .15s,background .12s;color:var(--n-ink)}
-.note:hover .nb{opacity:.72}
+/* 쉼에서는 걸려 있는 핀·별만 남고 나머지는 display:none으로 자리째 접힌다. 그래서 핀 없이
+   즐겨찾기만 한 메모는 별이 왼쪽 맨 끝에 온다. 별 색은 --n-ink(메모 잉크색)다. */
+.nb{width:20px;height:20px;border-radius:4px;display:none;place-items:center;opacity:.72;transition:opacity .15s,background .12s;color:var(--n-ink)}
+.note:hover .nb{display:grid}
 .nb:hover{opacity:1 !important;background:rgba(0,0,0,.08)}
-.note.pinned .nb.pin{opacity:1}
+.note.pinned .nb.pin,.note.favorite .nb.star{display:grid;opacity:1}
 .nb svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .note.pinned .nb.pin svg path.fill{fill:currentColor}
+.note.favorite .nb.star svg path{fill:currentColor}
 .nb-spacer{flex:1}
 .note .editor{flex:1;overflow:auto;padding:0 14px 14px}
 .note::after{content:'';position:absolute;right:3px;bottom:3px;width:10px;height:10px;
@@ -396,6 +399,7 @@ function noteEl(n){
   const el=document.createElement('div');el.className='note';el.dataset.id=n.id;
   el.innerHTML=`<div class="note-bar" data-drag="note">
     <button class="nb pin" title="항상 위에 고정">${PIN}</button>
+    <button class="nb star" title="즐겨찾기">${STAR}</button>
     <button class="nb new" title="새 메모">＋</button><div class="nb-spacer"></div>
     <button class="nb close" title="닫기 (메모함에 남음)">✕</button></div><div class="fschip"></div>`;
   el.insertBefore(bindEditor(document.createElement('div'),n),el.querySelector('.fschip'));

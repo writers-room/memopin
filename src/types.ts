@@ -61,6 +61,10 @@ export interface Settings {
   default_font_size: number;
   /** 메모함 편집 칸 전용 글자 크기. 11..28, 기본 14. 메모의 font_size와 무관하다 */
   box_font_size: number;
+  /** 최근 쓴 색. 최신이 앞, 중복 없음, 최대 10. 기본 팔레트 14색은 넣지 않는다 */
+  recent_colors: string[];
+  /** 즐겨찾는 색. 최대 10. 우클릭 메뉴 팔레트의 ☆로 넣고 뺀다 */
+  favorite_colors: string[];
   /** null = 기본 폴더 */
   data_dir: string | null;
 }

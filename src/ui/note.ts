@@ -41,6 +41,8 @@ const CHIP_MS = 900;
 
 const PIN_SVG =
   '<svg viewBox="0 0 24 24"><path class="fill" d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/><path d="M12 14v7"/></svg>';
+const STAR_SVG =
+  '<svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>';
 
 /** font_size는 정수로 저장한다(계약: 11..28). */
 export function clampFontSize(px: number): number {
@@ -143,9 +145,12 @@ async function start(root: HTMLElement, id: string): Promise<void> {
   // ── 뼈대 ──────────────────────────────────────────────────────────────────
   root.className = 'note';
   root.innerHTML =
-    // 핀은 왼쪽 위에 고정(고정된 메모는 항상 보인다), 그 오른쪽에 새 메모(+), 맨 오른쪽에 닫기.
+    // 왼쪽부터 핀·별·새 메모(+), 맨 오른쪽에 닫기. 쉼에서는 걸려 있는 핀과 즐겨찾기 별만
+    // 보이고 나머지는 자리째 접힌다(note.css). 그래서 핀 없이 즐겨찾기만 한 메모는 별이
+    // 왼쪽 맨 끝에 온다. 순서는 DOM 그대로고 CSS가 display로만 여닫는다.
     '<div class="note-bar" data-tauri-drag-region>' +
     `<button class="nb pin" type="button" title="항상 위에 고정">${PIN_SVG}</button>` +
+    `<button class="nb star" type="button" title="즐겨찾기">${STAR_SVG}</button>` +
     '<button class="nb new" type="button" title="새 메모">＋</button>' +
     '<div class="nb-spacer" data-tauri-drag-region></div>' +
     '<button class="nb close" type="button" title="닫기 (메모함에 남음)">✕</button>' +
@@ -195,6 +200,7 @@ async function start(root: HTMLElement, id: string): Promise<void> {
   function paint(): void {
     applyNoteColor(document.documentElement, note.color);
     root.classList.toggle('pinned', note.always_on_top);
+    root.classList.toggle('favorite', note.favorite);
   }
   paint();
 
@@ -228,6 +234,10 @@ async function start(root: HTMLElement, id: string): Promise<void> {
 
   bar.querySelector<HTMLButtonElement>('.nb.pin')!.addEventListener('click', () => {
     void applyPatch({ always_on_top: !note.always_on_top });
+  });
+
+  bar.querySelector<HTMLButtonElement>('.nb.star')!.addEventListener('click', () => {
+    void applyPatch({ favorite: !note.favorite });
   });
 
   bar.querySelector<HTMLButtonElement>('.nb.close')!.addEventListener('click', () => {
@@ -291,9 +301,10 @@ async function start(root: HTMLElement, id: string): Promise<void> {
         // 창은 Rust가 닫는다(계약).
         void deleteNote(id).catch(fail);
         break;
+      case 'duplicate':
       case 'restore':
       case 'purge':
-        // note 모드 메뉴에는 없다.
+        // note 모드 메뉴에는 없다(복제·복원·완전 삭제는 메모함 쪽 항목이다).
         break;
     }
   }
