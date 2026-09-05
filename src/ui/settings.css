@@ -1,0 +1,50 @@
+/*
+ * 설정 창. design/mockup.html의 .set-body / .row / .sw2 규칙을 옮긴 것이다.
+ * 시안의 커스텀 제목줄은 없다 — 설정도 OS 장식이 있는 창이다.
+ */
+
+.set-body { padding: 6px 20px 18px; display: flex; flex-direction: column; gap: 2px; overflow: auto; height: 100vh; }
+.set-body h5 {
+  margin: 14px 0 6px; font-size: 11px; letter-spacing: .08em; color: var(--ink-3);
+  text-transform: uppercase; font-weight: 600;
+}
+.row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.row:last-child { border-bottom: 0; }
+.row .lbl { flex: 1; min-width: 0; }
+.row .lbl small { display: block; color: var(--ink-3); font-size: 12px; }
+.row select, .row input[type=text] {
+  height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 5px;
+  background: var(--surface-2); color: var(--ink);
+}
+.row input[type=text] { width: 150px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; text-align: center; }
+.row input[type=text].listening { border-color: var(--accent); color: var(--accent); }
+.row .path {
+  font-size: 12px; color: var(--ink-2); font-family: ui-monospace, Consolas, monospace;
+  background: var(--surface-2); padding: 5px 8px; border-radius: 5px; border: 1px solid var(--line);
+  max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
+}
+.row .note { font-size: 12.5px; color: var(--ink-2); }
+.sw2 {
+  position: relative; width: 38px; height: 22px; border-radius: 11px; background: var(--surface-3);
+  border: 1px solid var(--line); transition: background .15s; flex: none;
+}
+.sw2::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: left .15s;
+}
+.sw2.on { background: var(--accent); border-color: var(--accent); }
+.sw2.on::after { left: 18px; }
+
+.btn {
+  height: 34px; padding: 0 12px; border-radius: 6px; background: var(--accent); color: #fff;
+  font-weight: 600; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.btn:hover { filter: brightness(1.07); }
+.btn.ghost { background: var(--surface-3); color: var(--ink); }
+.btn.sm { height: 28px; padding: 0 10px; font-size: 12.5px; font-weight: 500; }
+.btn[hidden] { display: none; }
+
+/* 행 아래에 붙는 알림. 실패는 빨강, 성공·안내는 회색. */
+.msg { font-size: 12px; color: var(--ink-3); padding: 0 0 8px; margin-top: -6px; }
+.msg.bad { color: var(--danger); }
+.msg[hidden] { display: none; }

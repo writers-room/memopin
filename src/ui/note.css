@@ -1,0 +1,61 @@
+/*
+ * 메모 창 스타일. design/mockup.html의 .note / .note-bar / .nb / .fschip 규칙을 옮긴 것이다.
+ * 시안에서는 메모가 바탕화면 위에 떠 있는 div라 position·width/height·resize·box-shadow가
+ * 붙어 있었지만, 여기서는 창 하나가 곧 메모 하나다. 자리와 크기는 OS가 정하고 그림자는
+ * Tauri의 shadow:true가 그린다.
+ *
+ * 색은 --n-bg / --n-bar / --n-ink 셋뿐이고 documentElement에 걸린다(colors.ts).
+ */
+
+html, body { height: 100%; }
+body { background: var(--n-bg); color: var(--n-ink); }
+
+.note {
+  display: flex; flex-direction: column; height: 100vh; position: relative; overflow: hidden;
+  background: var(--n-bg); color: var(--n-ink);
+}
+
+/*
+ * 위쪽 띠는 평소에 메모 배경과 같은 색이라 보이지 않는다. 마우스를 메모 위에 올리면
+ * 살짝 어두워지며 버튼이 나타나고, 그 영역이 창의 손잡이다. 진한 색 띠는 지저분하다는
+ * 피드백으로 뺐다(--n-bar는 이제 쓰지 않는다).
+ */
+.note-bar {
+  height: 24px; flex: none; background: transparent;
+  display: flex; align-items: center; padding: 0 3px; cursor: grab; user-select: none;
+  transition: background .15s;
+}
+.note:hover .note-bar { background: rgba(0, 0, 0, .06); }
+.note-bar:active { cursor: grabbing; }
+.nb-spacer { flex: 1; align-self: stretch; }
+
+.nb {
+  width: 22px; height: 22px; flex: none; border-radius: 4px; display: grid; place-items: center;
+  opacity: 0; transition: opacity .15s, background .12s; color: var(--n-ink);
+}
+.note:hover .nb { opacity: .72; }
+.nb:hover { opacity: 1 !important; background: rgba(0, 0, 0, .08); }
+.note.pinned .nb.pin { opacity: 1; }
+.nb svg {
+  width: 16px; height: 16px; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.note.pinned .nb.pin svg path.fill { fill: currentColor; }
+
+/* tokens.css가 body에 user-select:none을 걸어 두므로 본문만 되돌린다. */
+.note .editor { flex: 1; overflow: auto; padding: 2px 14px 14px; user-select: text; }
+
+/* 시안의 .note::after 자리. 실제 요소여야 pointerdown으로 창 크기 조절을 시작할 수 있다. */
+.note-resize { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; }
+.note-resize::after {
+  content: ''; position: absolute; right: 3px; bottom: 3px; width: 10px; height: 10px;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  opacity: .25; border-radius: 1px;
+}
+
+.fschip {
+  position: absolute; right: 14px; bottom: 10px; padding: 2px 8px; border-radius: 999px;
+  background: var(--n-ink); color: var(--n-bg); font-size: 11px;
+  opacity: 0; transition: opacity .2s; pointer-events: none; font-variant-numeric: tabular-nums;
+}
+.fschip.show { opacity: .85; }

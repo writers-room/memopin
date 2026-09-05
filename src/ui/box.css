@@ -1,0 +1,121 @@
+/*
+ * 메모함. design/mockup.html의 .box-body / .side / .listpane / .editpane 규칙을 옮긴 것이다.
+ * 시안의 .win-bar(커스텀 제목줄)는 없다 — 메모함은 OS 장식이 있는 일반 창이라 제목줄은 OS 것이다.
+ */
+
+.box-body { height: 100vh; display: flex; min-height: 0; }
+
+/* ── 사이드바 ── */
+.side {
+  width: 164px; flex: none; border-right: 1px solid var(--line); background: var(--surface-2);
+  padding: 12px 8px; display: flex; flex-direction: column; gap: 2px; overflow: auto;
+}
+.side h6 {
+  margin: 8px 10px 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  color: var(--ink-3); text-transform: uppercase;
+}
+.cat {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px;
+  color: var(--ink-2); text-align: left; width: 100%; min-width: 0;
+}
+.cat > .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat:hover { background: var(--surface-3); }
+.cat.on { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+.cat .n { margin-left: auto; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.cat.on .n { color: var(--accent); }
+.cat.add { color: var(--ink-3); font-size: 13px; }
+.side .grow { flex: 1; min-height: 12px; }
+.side .catinput {
+  width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--accent); border-radius: 6px;
+  background: var(--surface); color: var(--ink); outline: none; min-width: 0;
+}
+
+/* 카테고리 우클릭 메뉴. context-menu.ts와 별개지만 토큰은 같다. */
+.catmenu {
+  position: fixed; z-index: 9999; min-width: 140px; padding: 6px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-lift);
+  color: var(--ink); font-size: 13.5px;
+}
+.catmenu[hidden] { display: none; }
+.catmenu button { display: block; width: 100%; padding: 7px 10px; border-radius: 5px; text-align: left; }
+.catmenu button:hover { background: var(--surface-2); }
+.catmenu button.danger { color: var(--danger); }
+
+/* ── 목록 ── */
+.listpane { width: 280px; flex: none; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--line); }
+.tools { display: flex; gap: 8px; align-items: stretch; padding: 12px 10px 8px; }
+/* 검색칸과 같은 높이의 정사각형. 글리프는 가운데. */
+.tools .btn.new { width: 34px; height: auto; padding: 0; justify-content: center; font-size: 20px; line-height: 1; }
+.search {
+  flex: 1; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--ink-3);
+}
+.search input { flex: 1; border: 0; background: transparent; color: var(--ink); outline: none; min-width: 0; }
+.search svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+.btn {
+  height: 34px; padding: 0 12px; border-radius: 6px; background: var(--accent); color: #fff;
+  font-weight: 600; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.btn:hover { filter: brightness(1.07); }
+.btn[hidden] { display: none; }
+.btn.ghost { background: var(--surface-3); color: var(--ink); }
+.btn.sm { height: 28px; padding: 0 10px; font-size: 12.5px; font-weight: 500; }
+.hint { padding: 0 12px 8px; font-size: 12px; color: var(--ink-3); }
+.hint[hidden] { display: none; }
+.err { padding: 0 12px 8px; font-size: 12px; color: var(--danger); }
+.err[hidden] { display: none; }
+.trashbar { padding: 0 10px 8px; }
+.list { flex: 1; overflow: auto; padding: 4px 6px 12px; display: flex; flex-direction: column; gap: 2px; }
+.item {
+  position: relative; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto;
+  column-gap: 8px; padding: 9px 8px 9px 18px; border-radius: 6px; text-align: left; width: 100%;
+  cursor: default; align-items: center;
+}
+.item::before {
+  content: ''; position: absolute; left: 6px; top: 10px; bottom: 10px; width: 4px;
+  border-radius: 2px; background: var(--stripe);
+}
+.item:hover { background: var(--surface-2); }
+.item.sel { background: var(--accent-soft); }
+.item .t {
+  font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: flex; align-items: center; gap: 5px; min-width: 0;
+}
+.item .t span { overflow: hidden; text-overflow: ellipsis; }
+.item .t .glyph { flex: none; font-size: 11px; color: var(--ink-3); }
+.item .t .open { flex: none; font-size: 11px; font-weight: 600; color: var(--accent); }
+.item .p { grid-column: 1/-1; color: var(--ink-2); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .meta {
+  display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.star { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 4px; color: var(--ink-3); opacity: .35; }
+.item:hover .star, .star.on { opacity: 1; }
+.star.on { color: var(--star); }
+.star svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.star.on svg { fill: currentColor; }
+.empty { margin: auto; color: var(--ink-3); text-align: center; font-size: 13px; padding: 40px; }
+
+/* ── 편집 칸 ── */
+.editpane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ed-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px 8px; border-bottom: 1px solid var(--line); }
+.ed-head[hidden] { display: none; }
+.ed-head .dot {
+  width: 12px; height: 12px; border-radius: 50%; background: var(--stripe);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); flex: none;
+}
+.ed-head .title { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-head .ib { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 5px; color: var(--ink-2); }
+.ed-head .ib:hover { background: var(--surface-3); }
+.ed-head .ib.on { color: var(--accent); }
+.ed-head .ib.star { opacity: 1; }
+.ed-head .ib.star.on { color: var(--star); }
+.ed-head .ib svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ed-head .ib.on svg path.fill, .ed-head .ib.star.on svg { fill: currentColor; }
+.editpane .editor { flex: 1; overflow: auto; padding: 16px 22px 24px; max-width: 72ch; }
+.editpane .editor[hidden] { display: none; }
+.editpane .fsnote {
+  padding: 6px 16px; font-size: 11.5px; color: var(--ink-3); border-top: 1px solid var(--line);
+  display: flex; justify-content: space-between;
+}
+.editpane .fsnote[hidden] { display: none; }

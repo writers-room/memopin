@@ -1,0 +1,50 @@
+/*
+ * 편집기 스타일. design/mockup.html의 .editor / .fmt 규칙을 그대로 옮긴 것이다.
+ * 글자 크기는 메모마다 다르므로 --fs 변수로 받는다(Ctrl+휠로 바뀐다).
+ * 완료 체크표시는 배경을 파내는 방식이라 메모 창에서는 메모 색(--n-bg),
+ * 메모함에서는 --surface를 쓴다.
+ */
+
+.editor {
+  outline: none;
+  font-size: var(--fs, 15px);
+  line-height: 1.6;
+  min-height: 60px;
+  user-select: text;
+}
+.editor p { margin: 0; }
+.editor ul, .editor ol { margin: 0; padding-left: 22px; }
+.editor ul { list-style: disc; }
+.editor ol { list-style: decimal; }
+.editor li.task { list-style: none; position: relative; margin-left: -22px; padding-left: 24px; }
+.editor .cb {
+  position: absolute; left: 0; top: .35em; width: 15px; height: 15px;
+  border: 1.6px solid currentColor; border-radius: 4px; opacity: .7; cursor: pointer;
+}
+.editor li.task.done { opacity: .55; text-decoration: line-through; }
+.editor li.task.done .cb { background: currentColor; }
+.editor li.task.done .cb::after {
+  content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px;
+  border: solid var(--n-bg, var(--surface)); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.editor:empty::before { content: attr(data-ph); opacity: .45; }
+.editor u { text-decoration-thickness: 1px; }
+
+/* ── 서식 위젯 ── */
+.fmt {
+  position: fixed; z-index: 9999; display: flex; gap: 2px; padding: 4px;
+  border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
+  box-shadow: var(--shadow-lift);
+}
+.fmt[hidden] { display: none; }
+.fmt button {
+  width: 30px; height: 28px; border-radius: 5px; display: grid; place-items: center;
+  font-size: 13.5px; color: var(--ink);
+}
+.fmt button:hover { background: var(--surface-2); }
+.fmt .b { font-weight: 600; }
+.fmt .i { font-style: italic; }
+.fmt .u { text-decoration: underline; }
+.fmt .s { text-decoration: line-through; }
+.fmt .clear { color: var(--ink-2); font-size: 12px; width: auto; padding: 0 8px; }
+.fmt .div { width: 1px; background: var(--line); margin: 4px 2px; }

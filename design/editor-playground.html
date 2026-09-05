@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>편집기 놀이터</title>
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <style>
+    body { padding: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; user-select: text; }
+    .pane { border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-height: 240px; --n-bg: #FFF4A3; background: var(--n-bg); }
+    pre { font-size: 12px; white-space: pre-wrap; word-break: break-all; background: var(--surface-2); padding: 8px; border-radius: 6px; }
+    h4 { margin: 0 0 8px; font-size: 12px; color: var(--ink-3); }
+  </style>
+</head>
+<body>
+  <!--
+    편집기 모듈을 Tauri 없이 진짜 Chromium에서 굴려 보는 페이지. jsdom에는 execCommand가 없어서
+    자동 서식·캐럿 문제는 여기서만 재현된다. `npm run dev` 뒤 http://localhost:5175/design/editor-playground.html
+  -->
+  <div>
+    <h4>편집기</h4>
+    <div class="pane" id="pane"></div>
+  </div>
+  <div>
+    <h4>getHtml()</h4>
+    <pre id="html"></pre>
+    <h4>innerHTML (화면 DOM)</h4>
+    <pre id="dom"></pre>
+  </div>
+  <script type="module">
+    import { createEditor, attachFormatToolbar } from '/src/editor/index.ts';
+    const out = document.getElementById('html');
+    const dom = document.getElementById('dom');
+    const ed = createEditor({
+      onChange: (html) => { out.textContent = html; dom.textContent = ed.el.innerHTML; },
+    });
+    document.getElementById('pane').appendChild(ed.el);
+    attachFormatToolbar(() => [ed.el]);
+    window.__ed = ed;
+  </script>
+</body>
+</html>

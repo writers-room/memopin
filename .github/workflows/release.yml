@@ -1,0 +1,206 @@
+name: 메모핀 릴리스 (자동 업데이트)
+
+# 태그(v0.1.0 등)를 push하면 실행됩니다.
+#   git tag v0.1.0 && git push origin v0.1.0
+# tauri-action이 윈도우/맥 설치본과 함께 자동 업데이트용 latest.json(서명 포함)을
+# GitHub Release에 올려줍니다. 앱은 이 latest.json을 보고 새 버전을 감지합니다.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+# 같은 태그로 두 실행이 겹치지 않게 한다. max-parallel은 한 워크플로 실행 안에서만
+# 유효해서, 이전 실행이 살아 있는 채로 re-run 하면 두 실행의 tauri-action이 같은
+# 릴리스의 latest.json에 각자 read-modify-write를 해 경합이 생긴다.
+# 취소하지는 않는다(빌드 도중 취소되면 반쪽 릴리스가 남을 수 있다). 앞 실행이 끝나길 기다린다.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      # 여러 플랫폼을 동시에 빌드하면 각 잡이 latest.json을 각자 올리다가 나중 것이
+      # 앞의 내용을 덮어써서 한쪽 플랫폼이 통째로 빠진 채 배포된다.
+      # 윈도우 → 맥 순서로 하나씩 돌린다. 이 값을 늘리지 말 것.
+      max-parallel: 1
+      matrix:
+        include:
+          - platform: windows-latest
+            args: "--bundles nsis"
+            rust_targets: ""
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+    runs-on: ${{ matrix.platform }}
+    steps:
+      # workflow_dispatch로 브랜치(main 등)를 골라 실행하면 tagName에 "main"이 들어가
+      # 태그 main / 릴리스 "메모핀 main"이 만들어지고 latest를 오염시킨다.
+      # 태그에서 실행한 경우가 아니면 아무것도 만들기 전에 멈춘다.
+      - name: 태그에서 실행됐는지 확인
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        shell: bash
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          echo "이 워크플로는 v로 시작하는 태그에서만 실행할 수 있습니다."
+          echo "현재 ref: $REF"
+          echo "브랜치를 골라 수동 실행하면 브랜치 이름으로 태그와 릴리스가 잘못 만들어집니다."
+          echo "Actions에서 다시 실행하려면 'Use workflow from'에서 태그(v...)를 고르세요."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Node 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Rust 설치
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: 의존성 설치
+        run: npm install
+
+      - name: 앱 아이콘 생성
+        run: npx tauri icon app-icon.png
+
+      - name: 빌드 + 릴리스 + latest.json 생성
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 아래 두 개는 저장소 Settings → Secrets에 등록해야 합니다(자동 업데이트 서명).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "메모핀 ${{ github.ref_name }}"
+          # 이 문구는 GitHub 릴리스 페이지에 그대로 올라갑니다. 태그를 붙이기 전에
+          # 이번에 무엇이 달라졌는지로 바꿔 주세요.
+          releaseBody: |
+            **이번에 달라진 점** — 여기에 채워 주세요.
+
+            윈도우는 설치 파일을 실행하면 됩니다. 맥은 첫 실행만 응용 프로그램 폴더에서 우클릭 → 열기로 열어 주세요.
+          # 먼저 draft로 만든다. draft 릴리스는 /releases/latest/에 잡히지 않으므로,
+          # 빌드가 도는 동안 사용자의 자동 업데이트가 반쪽짜리(혹은 없는)
+          # latest.json을 보는 일이 없다. 아래 verify가 통과하면 그때 공개한다.
+          releaseDraft: true
+          prerelease: false
+          # 릴리스 파일명을 영문으로 고정 — 한글 파일명이 GitHub 업로드 과정에서
+          # 임의로 바뀌면서 tauri-action이 설치 파일과 .sig 파일을 짝짓지 못해
+          # latest.json 생성을 건너뛰는 일을 막기 위함.
+          releaseAssetNamePattern: "memopin_[version]_[arch][setup][ext]"
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }}
+
+  # 배포될 latest.json이 멀쩡한지 확인하고, 통과했을 때만 draft를 풀어 공개한다.
+  # 플랫폼이 빠졌거나 버전/서명/주소가 어긋난 채로 나가면 그 사용자는 업데이트를
+  # 아예 못 받는데, 릴리스가 초록불이라 눈치채기 어렵다. 여기서 실패로 잡는다.
+  verify:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: latest.json 검증
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # gh api의 octet-stream 방식은 리다이렉트 처리에 기대다가 JSON이 아닌 것을
+          # 받아올 수 있고, draft 릴리스는 태그로 조회되지 않을 수 있다.
+          # gh release download는 draft에서도 동작하고 파일을 그대로 내려받는다.
+          if ! gh release download "$TAG" -p latest.json --clobber; then
+            echo "릴리스에서 latest.json을 내려받지 못했습니다."
+            echo "릴리스($TAG)를 찾을 수 없거나, latest.json 에셋이 올라가지 않았습니다."
+            exit 1
+          fi
+          # latest.json의 url이 '이번 릴리스'의 에셋을 가리키는지 대조하려면 에셋 목록이 필요하다.
+          gh release view "$TAG" --json assets --jq '[.assets[].apiUrl] | join("\n")' > assets.txt
+          node -e '
+            const fs = require("fs");
+            const tag = process.env.TAG;
+            const want = tag.replace(/^v/, "");
+            const assetIds = new Set(
+              fs.readFileSync("assets.txt", "utf8").trim().split(/\r?\n/)
+                .filter(Boolean).map(u => u.split("/").pop())
+            );
+            let d;
+            try {
+              d = JSON.parse(fs.readFileSync("latest.json", "utf8"));
+            } catch (e) {
+              console.error("실패: latest.json이 올바른 JSON이 아닙니다 — " + e.message);
+              process.exit(1);
+            }
+            const ks = Object.keys(d.platforms || {});
+            const errs = [];
+            console.log("태그: " + tag);
+            console.log("latest.json의 version: " + String(d.version));
+            console.log("플랫폼: " + (ks.join(", ") || "(없음)"));
+
+            // 메모핀은 윈도우와 맥을 함께 낸다. 둘 중 하나라도 빠지면 그 플랫폼
+            // 사용자는 업데이트를 받지 못하므로 여기서 막는다.
+            if (!ks.some(k => k.startsWith("windows"))) {
+              errs.push("windows 플랫폼 항목이 없습니다. 윈도우 사용자는 업데이트를 받지 못합니다. 윈도우 빌드가 latest.json을 올리지 못했을 수 있습니다.");
+            }
+            if (!ks.some(k => k.startsWith("darwin"))) {
+              errs.push("darwin(맥) 플랫폼 항목이 없습니다. 맥 사용자는 업데이트를 받지 못합니다. 맥 빌드가 latest.json을 올리지 못했거나, 윈도우 빌드가 맥 항목을 덮어썼을 수 있습니다.");
+            }
+            if (d.version !== want) {
+              errs.push("버전이 태그와 다릅니다 — 태그는 " + want + "인데 latest.json에는 " + String(d.version) + "이(가) 적혀 있습니다. tauri.conf.json의 version과 태그를 맞추세요.");
+            }
+            for (const k of ks) {
+              const p = d.platforms[k] || {};
+              const sig = typeof p.signature === "string" ? p.signature.trim() : "";
+              if (sig.length === 0) {
+                errs.push(k + ": 서명(signature)이 비어 있습니다. 서명 키가 빌드에 전달되지 않았을 수 있습니다. 이대로 나가면 앱이 업데이트를 거부합니다.");
+              } else {
+                console.log(k + ": 서명 있음 (" + sig.length + "자, 내용은 출력하지 않습니다)");
+              }
+              // tauri-action은 이 저장소에서 api.github.com/.../releases/assets/<id> 형식을 쓴다.
+              // 태그 문자열은 주소에 들어가지 않으므로, 주소 끝의 에셋 id가 이번 릴리스의
+              // 에셋인지로 대조한다. 옛 항목이 병합돼 남으면 id가 이번 릴리스에 없어서 걸린다.
+              const url = typeof p.url === "string" ? p.url : "";
+              const id = url.split("/").pop();
+              if (!url) {
+                errs.push(k + ": 내려받기 주소(url)가 비어 있습니다.");
+              } else if (!assetIds.has(id)) {
+                errs.push(k + ": 내려받기 주소가 이번 릴리스(" + tag + ")의 에셋이 아닙니다. 이전 버전의 항목이 latest.json에 그대로 남아 병합된 것으로 보입니다 → " + url);
+              } else {
+                console.log(k + ": 이번 릴리스의 에셋을 가리킵니다 (asset " + id + ")");
+              }
+            }
+
+            if (errs.length) {
+              console.error("");
+              console.error("latest.json 검증에 실패했습니다. 릴리스는 draft로 남겨 둡니다(사용자에게 나가지 않습니다).");
+              for (const e of errs) console.error("  - " + e);
+              process.exit(1);
+            }
+            console.log("검증을 모두 통과했습니다.");
+          '
+
+      # 위 검증 스텝이 실패하면 이 스텝은 실행되지 않는다(GitHub Actions는 앞 스텝이
+      # 실패하면 if가 없는 뒤 스텝을 건너뛴다). 즉 검증을 통과한 릴리스만 공개된다.
+      - name: 검증 통과 — 릴리스 공개
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # --latest를 명시한다. 앱은 /releases/latest/download/latest.json을 보는데,
+          # 여기서 latest로 잡히지 않으면 공개는 됐어도 사용자에게는 이전 버전이
+          # 계속 내려간다 — 우리가 막으려는 바로 그 증상이다. 기본값에 기대지 않는다.
+          gh release edit "$TAG" --draft=false --latest
+          echo "릴리스 $TAG 를 공개했습니다."

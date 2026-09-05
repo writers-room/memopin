@@ -1,0 +1,42 @@
+[package]
+name = "memopin"
+version = "0.1.0"
+description = "메모핀 - 개인용 데스크톱 스티커 메모"
+edition = "2021"
+
+[lib]
+name = "memopin_lib"
+crate-type = ["lib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+# 데이터 폴더 감시(동기화 클라이언트가 내려받은 파일을 알아채기 위해).
+notify = "8"
+
+# Windows에서 한글 조합 중 창 이동/리사이즈 시작(WM_ENTERSIZEMOVE)을 가로채
+# wry의 강제 재포커스를 막기 위한 의존성. 이미 tauri/wry가 내부적으로 쓰는
+# windows crate와 같은 버전(0.61)을 써야 HWND 등 타입이 서로 호환된다.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+strip = true
+lto = true

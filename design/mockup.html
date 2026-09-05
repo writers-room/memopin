@@ -1,0 +1,529 @@
+<title>메모핀 시안</title>
+<style>
+@font-face{font-family:'Pretendard';src:url(../public/fonts/Pretendard-Regular.woff2) format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Pretendard';src:url(../public/fonts/Pretendard-SemiBold.woff2) format('woff2');font-weight:600;font-display:swap}
+
+:root{
+  --ground-a:#dfe6ef; --ground-b:#c9d5e4;
+  --surface:#ffffff; --surface-2:#f5f6f8; --surface-3:#eceef2;
+  --line:#dcdfe5; --ink:#1c1e24; --ink-2:#5c6270; --ink-3:#8b90a0;
+  --accent:#4f63d2; --accent-soft:#e8ebfb; --danger:#c8423c; --star:#d9a021;
+  --shadow:0 10px 30px rgba(28,34,52,.18), 0 2px 6px rgba(28,34,52,.10);
+  --shadow-lift:0 22px 48px rgba(28,34,52,.28), 0 4px 10px rgba(28,34,52,.14);
+  --bar:#f7f8fa; --taskbar:rgba(240,243,248,.88);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground-a:#2a2f3a; --ground-b:#1b1e26;
+    --surface:#22242a; --surface-2:#1b1d22; --surface-3:#2b2e36;
+    --line:#363a44; --ink:#ececf1; --ink-2:#a9aeba; --ink-3:#737886;
+    --accent:#8b9bff; --accent-soft:#2c3252; --danger:#ef7a74; --star:#f2c14e;
+    --shadow:0 10px 30px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.35);
+    --shadow-lift:0 22px 48px rgba(0,0,0,.6), 0 4px 10px rgba(0,0,0,.4);
+    --bar:#2a2d34; --taskbar:rgba(28,30,37,.9);
+  }
+}
+:root[data-theme="dark"]{
+  --ground-a:#2a2f3a; --ground-b:#1b1e26;
+  --surface:#22242a; --surface-2:#1b1d22; --surface-3:#2b2e36;
+  --line:#363a44; --ink:#ececf1; --ink-2:#a9aeba; --ink-3:#737886;
+  --accent:#8b9bff; --accent-soft:#2c3252; --danger:#ef7a74; --star:#f2c14e;
+  --shadow:0 10px 30px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.35);
+  --shadow-lift:0 22px 48px rgba(0,0,0,.6), 0 4px 10px rgba(0,0,0,.4);
+  --bar:#2a2d34; --taskbar:rgba(28,30,37,.9);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--ground-b);color:var(--ink);
+  font-family:'Pretendard',-apple-system,'Segoe UI','Malgun Gothic',sans-serif;
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow:auto}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input,select{font:inherit}
+
+/* ── 바탕화면 ─────────────────────────────── */
+.desktop{position:relative;width:100%;min-width:1640px;height:100vh;min-height:760px;overflow:hidden;
+  background:radial-gradient(120% 90% at 20% 0%,var(--ground-a),var(--ground-b) 70%)}
+.legend{position:absolute;left:18px;top:14px;z-index:5;display:flex;gap:14px;align-items:center;
+  padding:8px 14px;border-radius:999px;background:color-mix(in srgb,var(--surface) 70%,transparent);
+  backdrop-filter:blur(10px);color:var(--ink-2);font-size:12.5px;box-shadow:0 1px 3px rgba(0,0,0,.08);white-space:nowrap}
+.legend b{color:var(--ink);font-weight:600;letter-spacing:.02em}
+.legend span+span::before{content:'·';margin-right:14px;color:var(--ink-3)}
+
+/* ── 편집기(메모 창·메모함 공용) ───────────── */
+.editor{outline:none;font-size:var(--fs,15px);line-height:1.6;min-height:60px}
+.editor p{margin:0}
+.editor ul,.editor ol{margin:0;padding-left:22px}
+.editor ul{list-style:disc}
+.editor ol{list-style:decimal}
+.editor li.task{list-style:none;position:relative;margin-left:-22px;padding-left:24px}
+.editor .cb{position:absolute;left:0;top:.35em;width:15px;height:15px;border:1.6px solid currentColor;border-radius:4px;opacity:.7;cursor:pointer}
+.editor li.task.done{opacity:.55;text-decoration:line-through}
+.editor li.task.done .cb{background:currentColor}
+.editor li.task.done .cb::after{content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid var(--n-bg,#fff);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.editor:empty::before{content:attr(data-ph);opacity:.45}
+.editor u{text-decoration-thickness:1px}
+
+/* ── 메모 창 ─────────────────────────────── */
+.note{position:absolute;width:320px;height:320px;min-width:200px;min-height:140px;
+  background:var(--n-bg);color:var(--n-ink);border-radius:6px;box-shadow:var(--shadow);
+  display:flex;flex-direction:column;overflow:hidden;resize:both;transition:box-shadow .18s ease}
+.note.dragging{transition:none}
+.note.dragging,.note.pinned{box-shadow:var(--shadow-lift)}
+.note-bar{height:24px;flex:none;background:transparent;display:flex;align-items:center;padding:0 3px;cursor:grab;user-select:none;transition:background .15s}
+.note:hover .note-bar{background:rgba(0,0,0,.06)}
+.note-bar:active{cursor:grabbing}
+.nb{width:28px;height:28px;border-radius:4px;display:grid;place-items:center;opacity:0;transition:opacity .15s,background .12s;color:var(--n-ink)}
+.note:hover .nb{opacity:.72}
+.nb:hover{opacity:1 !important;background:rgba(0,0,0,.08)}
+.note.pinned .nb.pin{opacity:1}
+.nb svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.note.pinned .nb.pin svg path.fill{fill:currentColor}
+.nb-spacer{flex:1}
+.note .editor{flex:1;overflow:auto;padding:2px 14px 14px}
+.note::after{content:'';position:absolute;right:3px;bottom:3px;width:10px;height:10px;
+  border-right:2px solid currentColor;border-bottom:2px solid currentColor;opacity:.25;border-radius:1px;pointer-events:none}
+.fschip{position:absolute;right:14px;bottom:10px;padding:2px 8px;border-radius:999px;background:var(--n-ink);color:var(--n-bg);font-size:11px;opacity:0;transition:opacity .2s;pointer-events:none;font-variant-numeric:tabular-nums}
+.fschip.show{opacity:.85}
+
+/* ── 창 공통 ─────────────────────────────── */
+.win{position:absolute;background:var(--surface);color:var(--ink);border-radius:8px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line)}
+.win-bar{height:40px;flex:none;display:flex;align-items:center;gap:8px;padding:0 6px 0 14px;background:var(--bar);border-bottom:1px solid var(--line);cursor:grab;user-select:none}
+.win-bar:active{cursor:grabbing}
+.win-bar .app{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px}
+.logo{width:16px;height:16px;border-radius:3px;background:#FFF4A3;display:block;position:relative;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.logo::after{content:'';position:absolute;left:5px;top:-3px;width:6px;height:6px;border-radius:50%;background:#c8423c}
+.win-bar .spacer{flex:1}
+.wb{width:44px;height:32px;display:grid;place-items:center;color:var(--ink-2);border-radius:4px}
+.wb:hover{background:var(--surface-3)}
+.wb.close:hover{background:var(--danger);color:#fff}
+
+/* ── 메모함 ─────────────────────────────── */
+.box{left:32px;top:64px;width:940px;height:600px}
+.box-body{flex:1;display:flex;min-height:0}
+.side{width:164px;flex:none;border-right:1px solid var(--line);background:var(--surface-2);padding:12px 8px;display:flex;flex-direction:column;gap:2px}
+.side h6{margin:8px 10px 6px;font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--ink-3);text-transform:uppercase}
+.cat{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;color:var(--ink-2);text-align:left;width:100%}
+.cat:hover{background:var(--surface-3)}
+.cat.on{background:var(--accent-soft);color:var(--ink);font-weight:600}
+.cat .n{margin-left:auto;font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.cat.on .n{color:var(--accent)}
+.cat.add{color:var(--ink-3);font-size:13px}
+.side .grow{flex:1}
+.listpane{width:280px;flex:none;display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--line)}
+.tools{display:flex;gap:8px;align-items:center;padding:12px 10px 8px}
+.search{flex:1;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface-2);color:var(--ink-3)}
+.search input{flex:1;border:0;background:transparent;color:var(--ink);outline:none;min-width:0}
+.search svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.btn{height:34px;padding:0 12px;border-radius:6px;background:var(--accent);color:#fff;font-weight:600;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{filter:brightness(1.07)}
+.btn.ghost{background:var(--surface-3);color:var(--ink)}
+.list{flex:1;overflow:auto;padding:4px 6px 12px;display:flex;flex-direction:column;gap:2px}
+.item{position:relative;display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;column-gap:8px;
+  padding:9px 8px 9px 18px;border-radius:6px;text-align:left;width:100%;cursor:default;align-items:center}
+.item::before{content:'';position:absolute;left:6px;top:10px;bottom:10px;width:4px;border-radius:2px;background:var(--stripe)}
+.item:hover{background:var(--surface-2)}
+.item.sel{background:var(--accent-soft)}
+.item .t{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:5px;min-width:0}
+.item .t span{overflow:hidden;text-overflow:ellipsis}
+.item .t .glyph{flex:none;font-size:11px;color:var(--ink-3)}
+.item .t .open{flex:none;font-size:11px;font-weight:600;color:var(--accent)}
+.item .p{grid-column:1/-1;color:var(--ink-2);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .meta{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.star{width:22px;height:22px;display:grid;place-items:center;border-radius:4px;color:var(--ink-3);opacity:.35}
+.item:hover .star,.star.on{opacity:1}
+.star.on{color:var(--star)}
+.star svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
+.star.on svg{fill:currentColor}
+.empty{margin:auto;color:var(--ink-3);text-align:center;font-size:13px;padding:40px}
+.hint{padding:0 12px 8px;font-size:12px;color:var(--ink-3)}
+.editpane{flex:1;display:flex;flex-direction:column;min-width:0}
+.ed-head{display:flex;align-items:center;gap:8px;padding:12px 16px 8px;border-bottom:1px solid var(--line)}
+.ed-head .dot{width:12px;height:12px;border-radius:50%;background:var(--stripe);box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);flex:none}
+.ed-head .title{font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ed-head .ib{width:30px;height:30px;display:grid;place-items:center;border-radius:5px;color:var(--ink-2)}
+.ed-head .ib:hover{background:var(--surface-3)}
+.ed-head .ib.on{color:var(--accent)}
+.ed-head .ib.star.on{color:var(--star)}
+.ed-head .ib svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ed-head .ib.on svg path.fill,.ed-head .ib.star.on svg{fill:currentColor}
+.editpane .editor{flex:1;overflow:auto;padding:16px 22px 24px;max-width:72ch}
+.editpane .fsnote{padding:6px 16px;font-size:11.5px;color:var(--ink-3);border-top:1px solid var(--line);display:flex;justify-content:space-between}
+
+/* ── 설정 창 ─────────────────────────────── */
+.settings{left:1000px;top:520px;width:520px;height:auto}
+.settings[hidden]{display:none}
+.set-body{padding:6px 20px 18px;display:flex;flex-direction:column;gap:2px}
+.set-body h5{margin:14px 0 6px;font-size:11px;letter-spacing:.08em;color:var(--ink-3);text-transform:uppercase;font-weight:600}
+.row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.row:last-child{border-bottom:0}
+.row .lbl{flex:1}
+.row .lbl small{display:block;color:var(--ink-3);font-size:12px}
+.row select,.row input[type=text]{height:30px;padding:0 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface-2);color:var(--ink)}
+.row input[type=text]{width:140px;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+.row .path{font-size:12px;color:var(--ink-2);font-family:ui-monospace,Consolas,monospace;background:var(--surface-2);padding:5px 8px;border-radius:5px;border:1px solid var(--line);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sw2{position:relative;width:38px;height:22px;border-radius:11px;background:var(--surface-3);border:1px solid var(--line);transition:background .15s;flex:none}
+.sw2::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .15s}
+.sw2.on{background:var(--accent);border-color:var(--accent)}
+.sw2.on::after{left:18px}
+.btn.sm{height:28px;padding:0 10px;font-size:12.5px;font-weight:500}
+
+/* ── 컨텍스트 메뉴 ────────────────────────── */
+.menu{position:fixed;z-index:9999;min-width:210px;padding:6px;border-radius:8px;background:var(--surface);border:1px solid var(--line);
+  box-shadow:var(--shadow-lift);color:var(--ink);font-size:13.5px}
+.menu[hidden]{display:none}
+.swatches{display:grid;grid-template-columns:repeat(8,22px);gap:6px;padding:6px 6px 8px;justify-content:center}
+.sw{width:22px;height:22px;border-radius:50%;background:var(--c);box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);position:relative;transition:transform .1s}
+.sw:hover{transform:scale(1.14)}
+.sw.on::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--accent)}
+.sw.custom{background:conic-gradient(#f66,#fc6,#6f6,#6cf,#66f,#f6f,#f66);overflow:hidden}
+.sw.custom input{position:absolute;inset:-6px;width:40px;height:40px;opacity:0;cursor:pointer}
+.sw.custom::before{content:'';position:absolute;inset:5px;border-radius:50%;background:var(--surface)}
+.mi{display:flex;align-items:center;gap:10px;width:100%;padding:7px 10px;border-radius:5px;text-align:left}
+.mi:hover{background:var(--surface-2)}
+.mi .chk{width:14px;color:var(--accent);font-weight:600;flex:none}
+.mi .arrow{margin-left:auto;color:var(--ink-3);font-size:11px}
+.mi.danger{color:var(--danger)}
+.sep{height:1px;background:var(--line);margin:5px 4px}
+.sub{position:relative}
+.sub .submenu{position:absolute;left:100%;top:-6px;display:none;min-width:150px;padding:6px;border-radius:8px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-lift)}
+.sub:hover .submenu{display:block}
+
+/* ── 서식 위젯 ────────────────────────────── */
+.fmt{position:fixed;z-index:9999;display:flex;gap:2px;padding:4px;border-radius:8px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-lift)}
+.fmt[hidden]{display:none}
+.fmt button{width:30px;height:28px;border-radius:5px;display:grid;place-items:center;font-size:13.5px;color:var(--ink)}
+.fmt button:hover{background:var(--surface-2)}
+.fmt .b{font-weight:600}.fmt .i{font-style:italic}.fmt .u{text-decoration:underline}.fmt .s{text-decoration:line-through}
+.fmt .clear{color:var(--ink-2);font-size:12px;width:auto;padding:0 8px}
+.fmt .div{width:1px;background:var(--line);margin:4px 2px}
+
+/* ── 작업표시줄·트레이 ───────────────────── */
+.taskbar{position:absolute;left:0;right:0;bottom:0;height:46px;background:var(--taskbar);backdrop-filter:blur(14px);
+  border-top:1px solid var(--line);display:flex;align-items:center;justify-content:center;z-index:4}
+.tb{width:40px;height:36px;border-radius:6px;display:grid;place-items:center;position:relative}
+.tb.on{background:var(--surface-3)}
+.tb.on::after{content:'';position:absolute;bottom:2px;left:14px;right:14px;height:3px;border-radius:2px;background:var(--accent)}
+.tb .logo{width:18px;height:18px}
+.tray{position:absolute;right:16px;top:0;bottom:0;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.tray .tb{width:30px;height:30px}
+.tray .tb .logo{width:14px;height:14px}
+.traymenu{position:absolute;right:90px;bottom:54px;z-index:6;min-width:170px;padding:6px;border-radius:8px;background:var(--surface);
+  border:1px solid var(--line);box-shadow:var(--shadow-lift);font-size:13.5px}
+.traymenu .cap{padding:4px 10px 6px;font-size:11px;color:var(--ink-3);letter-spacing:.06em}
+.toast{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);z-index:8;padding:9px 14px;border-radius:8px;background:var(--ink);color:var(--surface);font-size:13px;
+  box-shadow:var(--shadow);opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+
+<div class="desktop" id="desktop">
+  <div class="legend">
+    <b>memopin 시안</b>
+    <span>우클릭 → 색 14종 + 직접 고르기</span>
+    <span>Ctrl+휠 → 그 메모만 글자 크기</span>
+    <span>"- " 글머리, "1. " 숫자, "[] " 체크박스</span>
+    <span>글자 드래그 → 서식 위젯</span>
+    <span>트레이 → 설정</span>
+  </div>
+
+  <!-- 메모함 -->
+  <section class="win box" id="box" aria-label="메모함">
+    <div class="win-bar" data-drag="box">
+      <div class="app"><i class="logo"></i>메모함</div>
+      <div class="spacer"></div>
+      <button class="wb" title="최소화"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 6h10" stroke="currentColor" stroke-width="1.2"/></svg></button>
+      <button class="wb close" title="닫기 (트레이로 숨김)"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    </div>
+    <div class="box-body">
+      <nav class="side" id="side"></nav>
+      <div class="listpane">
+        <div class="tools">
+          <label class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="q" placeholder="메모 검색" aria-label="메모 검색"></label>
+          <button class="btn" id="newBtn" title="새 메모">＋</button>
+        </div>
+        <div class="hint" id="hint"></div>
+        <div class="list" id="list"></div>
+      </div>
+      <div class="editpane" id="editpane">
+        <div class="empty" style="margin:auto">왼쪽 목록에서 메모를 고르면 여기서 바로 편집합니다.<br>더블클릭하면 바탕화면에도 펼쳐집니다.</div>
+      </div>
+    </div>
+  </section>
+
+  <div id="notes"></div>
+
+  <!-- 설정 -->
+  <section class="win settings" id="settings" hidden aria-label="설정">
+    <div class="win-bar" data-drag="settings">
+      <div class="app"><i class="logo"></i>설정</div><div class="spacer"></div>
+      <button class="wb close" id="setClose" title="닫기"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    </div>
+    <div class="set-body">
+      <h5>일반</h5>
+      <div class="row"><div class="lbl">새 메모 전역 단축키<small>다른 앱을 쓰는 중에도 새 메모를 띄웁니다</small></div><input type="text" value="Ctrl+Shift+N" aria-label="단축키"><button class="sw2 on" role="switch" aria-checked="true" aria-label="단축키 사용"></button></div>
+      <div class="row"><div class="lbl">시작할 때 자동 실행<small>로그인하면 트레이에 조용히 올라옵니다</small></div><button class="sw2 on" role="switch" aria-checked="true" aria-label="자동 실행"></button></div>
+      <div class="row"><div class="lbl">메모함 테마</div><select><option>시스템 따라가기</option><option>라이트</option><option>다크</option></select></div>
+      <div class="row"><div class="lbl">새 메모 기본값</div><select><option>노랑</option><option>살구</option><option>초록</option><option>민트</option><option>파랑</option></select><select><option>15px</option><option>14px</option><option>16px</option><option>18px</option></select></div>
+      <h5>동기화</h5>
+      <div class="row"><div class="lbl">메모 저장 폴더<small>구글 드라이브·Dropbox·OneDrive·iCloud 폴더를 고르면 그 서비스가 동기화합니다</small></div><span class="path">C:\Users\tuber\Google Drive\memopin</span><button class="btn ghost sm">바꾸기…</button></div>
+      <div class="row"><div class="lbl">저장 상태</div><span style="font-size:12.5px;color:var(--ink-2)">방금 저장됨 · 메모 37개</span></div>
+      <h5>정보</h5>
+      <div class="row"><div class="lbl">메모핀 1.0.0<small>GitHub 릴리스에서 업데이트를 받습니다</small></div><button class="btn ghost sm">업데이트 확인</button></div>
+    </div>
+  </section>
+
+  <!-- 작업표시줄 -->
+  <div class="taskbar">
+    <button class="tb on" title="메모함"><i class="logo"></i></button>
+    <div class="tray"><button class="tb" title="메모핀 트레이"><i class="logo"></i></button><span>오후 4:12</span></div>
+  </div>
+  <div class="traymenu" aria-label="트레이 메뉴">
+    <div class="cap">메모핀</div>
+    <button class="mi" id="trayNew">새 메모<span class="arrow">Ctrl+Shift+N</span></button>
+    <button class="mi" id="trayBox">메모함 열기</button>
+    <button class="mi" id="traySet">설정</button>
+    <div class="sep"></div>
+    <button class="mi">종료</button>
+  </div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<!-- 컨텍스트 메뉴 -->
+<div class="menu" id="menu" hidden role="menu">
+  <div class="swatches" id="swatches"></div>
+  <div class="sep"></div>
+  <button class="mi" data-act="pin"><span class="chk" id="pinChk"></span>항상 위에 고정</button>
+  <button class="mi" data-act="fav"><span class="chk" id="favChk"></span>즐겨찾기</button>
+  <button class="mi" data-act="top"><span class="chk" id="topChk"></span>목록 상단에 고정</button>
+  <div class="sub"><button class="mi"><span class="chk"></span>카테고리 이동<span class="arrow">›</span></button><div class="submenu" id="catSub"></div></div>
+  <button class="mi" data-act="toggle"><span class="chk"></span><span id="toggleLabel">메모함에서 보기</span></button>
+  <div class="sep"></div>
+  <button class="mi danger" data-act="del"><span class="chk"></span>삭제</button>
+</div>
+<div class="menu" id="trashMenu" hidden role="menu">
+  <button class="mi" data-act="restore"><span class="chk"></span>복원</button>
+  <button class="mi danger" data-act="purge"><span class="chk"></span>완전히 삭제</button>
+</div>
+<div class="fmt" id="fmt" hidden role="toolbar" aria-label="서식">
+  <button class="b" data-cmd="bold" title="굵게 (Ctrl+B)">B</button>
+  <button class="i" data-cmd="italic" title="기울임 (Ctrl+I)">I</button>
+  <button class="u" data-cmd="underline" title="밑줄 (Ctrl+U)">U</button>
+  <button class="s" data-cmd="strikeThrough" title="취소선">S</button>
+  <span class="div"></span>
+  <button class="clear" data-cmd="removeFormat" title="서식 지우기">지우기</button>
+</div>
+
+<script>
+document.execCommand('defaultParagraphSeparator',false,'p');
+const PALETTE=[['#FFF4A3','노랑'],['#FFDDB8','살구'],['#DDF5B0','초록'],['#C6F1E3','민트'],['#D2E7FF','파랑'],['#D6F0FA','하늘'],['#E3D6FF','보라'],
+               ['#FFD3DC','분홍'],['#F7C4C4','장미'],['#EADCF5','라벤더'],['#F1E4CF','모래'],['#EDEDED','회색'],['#CFD6E0','슬레이트'],['#4A4A4E','차콜']];
+const hex2rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const rgb2hex=a=>'#'+a.map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
+const lum=([r,g,b])=>(.2126*r+.7152*g+.0722*b)/255;
+function shades(bg){const c=hex2rgb(bg),light=lum(c)>.45;
+  return{bar:rgb2hex(c.map(v=>v*(light?.9:.76))),ink:light?rgb2hex(c.map(v=>v*.18)):'#F2F2F2'}}
+
+let cats=['집필','펀딩','개발'];
+let notes=[
+ {id:1,color:'#FFF4A3',cat:'집필',open:true,pinned:true,fav:true,top:true,fs:15,x:1000,y:80,when:'방금',html:'<p>회귀 재벌물 3화 수정</p><ul><li>도입부 회상 장면 반 페이지로 줄이기</li><li>강태준 첫 대사 <b>더 차갑게</b></li><li>마지막 컷 <u>그 서류</u> 복선 다시 심기</li></ul><p>편집자 피드백: 2화 끝 클리프 약함</p>'},
+ {id:2,color:'#FFD3DC',cat:'펀딩',open:true,pinned:false,fav:false,top:false,fs:15,x:1290,y:140,when:'12분 전',html:'<p>텀블벅 리워드 발송</p><ul><li class="task"><span class="cb" contenteditable="false"></span>후원자 명단 엑셀 정리</li><li class="task"><span class="cb" contenteditable="false"></span>코드 16자 생성해서 메일 발송</li><li class="task"><span class="cb" contenteditable="false"></span>감사 카드 문구 확정 <i>(9/12까지)</i></li><li class="task done"><span class="cb" contenteditable="false"></span>리워드 안내 이미지</li></ul>'},
+ {id:3,color:'#D2E7FF',cat:'개발',open:true,pinned:false,fav:false,top:false,fs:13,x:1020,y:420,when:'1시간 전',html:'<p>타로캡 남은 일</p><ul><li>작품별 일지 분류 UI</li><li>사용자 정의 스프레드</li><li>결과 이미지 공유</li><li>FUNDING_URL 채우기</li></ul>'},
+ {id:4,color:'#DDF5B0',cat:'집필',open:false,pinned:false,fav:true,top:false,fs:15,x:600,y:400,when:'어제',html:'<p>BL 신작 인물 메모</p><p><b>서윤재</b> — 소리에 예민, 비 오는 날 못 견딤</p><p><b>한도경</b> — 말끝을 흐리는 버릇, 왼손잡이</p><p><s>둘의 첫 만남은 장례식장</s> → 도서관으로 바꿈</p>'},
+ {id:5,color:'#4A4A4E',cat:null,open:true,pinned:false,fav:false,top:false,fs:17,x:1330,y:470,when:'3시간 전',html:'<p>오늘 할 일</p><ul><li class="task done"><span class="cb" contenteditable="false"></span>손목 스트레칭</li><li class="task"><span class="cb" contenteditable="false"></span>안과 예약 전화</li><li class="task"><span class="cb" contenteditable="false"></span>저녁: 김치찌개</li></ul>'},
+ {id:6,color:'#E3D6FF',cat:'개발',open:false,pinned:false,fav:false,top:false,fs:15,x:700,y:200,when:'어제',html:'<p>memopin 설계 메모</p><ul><li>메모 하나 = 창 하나</li><li>Rust가 유일한 저장소, 메모마다 JSON 한 파일</li><li>제목은 첫 줄에서 파생</li><li>동기화는 폴더 선택으로</li></ul><p>출시 순서</p><ol><li>윈도우 exe + 자동 업데이트</li><li>맥 dmg</li><li>동기화 폴더</li></ol>'},
+ {id:7,color:'#F1E4CF',cat:'집필',open:false,pinned:false,fav:false,top:false,fs:15,x:760,y:300,when:'3일 전',html:'<p>로판 2권 플롯 탈출구</p><p>황태자 약혼 파기 → 세드릭이 대신 나서는 게 아니라 <b>리아가 직접 협상</b>하는 쪽으로. 협상 카드는 북부 광산 지분.</p>'},
+ {id:9,color:'#C6F1E3',cat:'펀딩',open:false,pinned:false,fav:false,top:false,fs:15,x:0,y:0,when:'5일 전',when:'5일 전',html:'<p>펀딩 페이지 문구</p><p>device 모드는 "암호화"라고 부르지 말 것. 비밀번호 잠금만 진짜 암호화.</p>'},
+ {id:8,color:'#FFF4A3',cat:null,open:false,pinned:false,fav:false,top:false,fs:15,deleted:true,x:0,y:0,when:'지난주',html:'<p>옛날 아이디어</p><p>타임루프 카페 — 폐기</p>'},
+];
+let nextId=10, z=10, current='all', selected=1, query='';
+const $=s=>document.querySelector(s);
+const desktop=$('#desktop'), notesEl=$('#notes'), listEl=$('#list'), sideEl=$('#side'), editpane=$('#editpane');
+
+const blocks=n=>{const d=document.createElement('div');d.innerHTML=n.html;return[...d.children].map(b=>b.textContent.replace(/\s+/g,' ').trim()).filter(Boolean)};
+const titleOf=n=>blocks(n)[0]||'(빈 메모)';
+const previewOf=n=>blocks(n).slice(1).join(' · ');
+const byId=id=>notes.find(n=>n.id===id);
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),1600)}
+
+/* ── 편집기 ── */
+function bindEditor(ed,n){
+  ed.classList.add('editor');ed.contentEditable='true';ed.dataset.id=n.id;ed.dataset.ph='메모를 적으세요. 첫 줄이 제목이 됩니다.';ed.spellcheck=false;
+  ed.innerHTML=n.html;ed.style.setProperty('--fs',n.fs+'px');
+  ed.addEventListener('input',()=>{autoformat(ed);normalize(ed);n.html=ed.innerHTML;n.when='방금';syncOthers(ed,n);renderList();renderHead()});
+  ed.addEventListener('click',e=>{const cb=e.target.closest('.cb');if(cb){cb.parentElement.classList.toggle('done');n.html=ed.innerHTML;syncOthers(ed,n);renderList()}});
+  ed.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){const li=caretBlock('li');if(li&&li.classList.contains('task')&&!li.textContent.trim()){e.preventDefault();li.classList.remove('task','done');li.querySelector('.cb')?.remove();document.execCommand('outdent')}}
+  });
+  return ed;
+}
+function caretBlock(sel){const s=getSelection();if(!s.rangeCount)return null;const a=s.anchorNode;return (a.nodeType===3?a.parentElement:a).closest(sel)}
+function autoformat(ed){
+  const block=caretBlock('p,div,li');if(!block||block===ed||!ed.contains(block)||block.tagName==='LI')return;
+  const t=block.textContent;const m=/^(- |\* |1\. |\[ ?\] )/.exec(t);if(!m)return;
+  const task=m[0][0]==='[',ordered=m[0][0]==='1';let len=m[0].length;
+  const w=document.createTreeWalker(block,NodeFilter.SHOW_TEXT);let tn;while(len>0&&(tn=w.nextNode())){const k=Math.min(len,tn.data.length);tn.data=tn.data.slice(k);len-=k}
+  if(!block.textContent&&!block.querySelector('br'))block.innerHTML='<br>';
+  const r=document.createRange();r.setStart(block,0);r.collapse(true);const s=getSelection();s.removeAllRanges();s.addRange(r);
+  document.execCommand(ordered?'insertOrderedList':'insertUnorderedList');
+  if(task){const li=caretBlock('li');if(li){li.classList.add('task')}}
+}
+function normalize(ed){
+  ed.querySelectorAll('li.task').forEach(li=>{if(!li.querySelector('.cb')){li.classList.remove('done');li.insertAdjacentHTML('afterbegin','<span class="cb" contenteditable="false"></span>');
+    const cur=caretBlock('li');if(cur===li){const r=document.createRange();r.setStartAfter(li.firstChild);r.collapse(true);const s=getSelection();s.removeAllRanges();s.addRange(r)}}});
+  ed.querySelectorAll('.cb').forEach(cb=>{if(!cb.parentElement.classList.contains('task'))cb.remove()});
+}
+function syncOthers(src,n){document.querySelectorAll(`.editor[data-id="${n.id}"]`).forEach(o=>{if(o!==src&&document.activeElement!==o)o.innerHTML=n.html})}
+function setFs(n,delta){n.fs=Math.max(11,Math.min(28,n.fs+delta));document.querySelectorAll(`.editor[data-id="${n.id}"]`).forEach(o=>o.style.setProperty('--fs',n.fs+'px'));
+  const chip=notesEl.querySelector(`.note[data-id="${n.id}"] .fschip`);if(chip){chip.textContent=`글자 ${n.fs}px`;chip.classList.add('show');clearTimeout(chip._t);chip._t=setTimeout(()=>chip.classList.remove('show'),900)}
+  renderHead(false)}
+
+/* 서식 위젯 */
+const fmt=$('#fmt');
+document.addEventListener('selectionchange',()=>{const s=getSelection();
+  if(!s.rangeCount||s.isCollapsed){fmt.hidden=true;return}
+  const a=s.anchorNode;const ed=(a.nodeType===3?a.parentElement:a).closest('.editor');if(!ed){fmt.hidden=true;return}
+  const r=s.getRangeAt(0).getBoundingClientRect();fmt.hidden=false;
+  fmt.style.left=Math.max(8,r.left+r.width/2-fmt.offsetWidth/2)+'px';fmt.style.top=Math.max(8,r.top-fmt.offsetHeight-8)+'px'});
+fmt.querySelectorAll('button').forEach(b=>{b.addEventListener('mousedown',e=>e.preventDefault());b.onclick=()=>{document.execCommand(b.dataset.cmd)}});
+
+/* ── 메모 창 ── */
+const PIN='<svg viewBox="0 0 24 24"><path class="fill" d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/><path d="M12 14v7"/></svg>';
+const STAR='<svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>';
+function noteEl(n){
+  const el=document.createElement('div');el.className='note';el.dataset.id=n.id;
+  el.innerHTML=`<div class="note-bar" data-drag="note">
+    <button class="nb new" title="새 메모">＋</button><div class="nb-spacer"></div>
+    <button class="nb pin" title="항상 위에 고정">${PIN}</button>
+    <button class="nb close" title="닫기 (메모함에 남음)">✕</button></div><div class="fschip"></div>`;
+  el.insertBefore(bindEditor(document.createElement('div'),n),el.querySelector('.fschip'));
+  el.querySelector('.new').onclick=()=>createNote(n.color,n.cat,n.x+36,n.y+36);
+  el.querySelector('.pin').onclick=()=>togglePin(n);
+  el.querySelector('.close').onclick=()=>closeNote(n);
+  el.addEventListener('pointerdown',()=>raise(n));
+  el.addEventListener('wheel',e=>{if(e.ctrlKey){e.preventDefault();setFs(n,e.deltaY<0?1:-1)}},{passive:false});
+  el.addEventListener('contextmenu',e=>{e.preventDefault();openMenu(e.clientX,e.clientY,n,'note')});
+  return el;
+}
+function paint(n){
+  const el=notesEl.querySelector(`.note[data-id="${n.id}"]`);if(!el)return;const s=shades(n.color);
+  el.style.setProperty('--n-bg',n.color);el.style.setProperty('--n-bar',s.bar);el.style.setProperty('--n-ink',s.ink);
+  el.style.left=n.x+'px';el.style.top=n.y+'px';el.style.zIndex=(n.pinned?1000:0)+(n.z||0);el.classList.toggle('pinned',!!n.pinned);
+}
+function raise(n){n.z=++z;paint(n)}
+function openNote(n){let el=notesEl.querySelector(`.note[data-id="${n.id}"]`);if(!el){el=noteEl(n);notesEl.appendChild(el);n.open=true}raise(n);renderList();renderHead(false)}
+function closeNote(n){notesEl.querySelector(`.note[data-id="${n.id}"]`)?.remove();n.open=false;renderList();renderHead(false)}
+function togglePin(n){n.pinned=!n.pinned;paint(n);toast(n.pinned?'항상 위에 고정했습니다':'고정을 풀었습니다')}
+function setColor(n,c){n.color=c;paint(n);renderList();renderHead(false)}
+function createNote(color='#FFF4A3',cat=null,x,y){
+  const pos={x:x??(1000+Math.random()*400|0),y:y??(120+Math.random()*300|0)};
+  const n={id:nextId++,color,cat:cat??(!['all','unfiled','trash','fav'].includes(current)?current:null),open:false,pinned:false,fav:current==='fav',top:false,fs:15,when:'방금',html:'<p><br></p>',...pos};
+  notes.unshift(n);selected=n.id;openNote(n);renderAll();notesEl.querySelector(`.note[data-id="${n.id}"] .editor`).focus();
+}
+function delNote(n){closeNote(n);n.deleted=true;n.pinned=false;if(selected===n.id)selected=null;renderAll();toast('휴지통으로 옮겼습니다')}
+
+/* ── 드래그 ── */
+let drag=null;
+document.addEventListener('pointerdown',e=>{
+  const bar=e.target.closest('[data-drag]');if(!bar||e.target.closest('button')||e.button!==0)return;
+  const win=bar.parentElement;const r=win.getBoundingClientRect(),d=desktop.getBoundingClientRect();
+  drag={win,dx:e.clientX-r.left+d.left,dy:e.clientY-r.top+d.top,id:win.dataset.id};win.classList.add('dragging');
+});
+document.addEventListener('pointermove',e=>{if(!drag)return;const x=e.clientX-drag.dx,y=e.clientY-drag.dy;drag.win.style.left=x+'px';drag.win.style.top=y+'px';if(drag.id){const n=byId(+drag.id);n.x=x;n.y=y}});
+document.addEventListener('pointerup',()=>{if(drag){drag.win.classList.remove('dragging');drag=null}});
+
+/* ── 메모함 ── */
+function matches(n,k){return k==='trash'?n.deleted:!n.deleted&&(k==='all'||(k==='fav'?n.fav:k==='unfiled'?!n.cat:n.cat===k))}
+const count=k=>notes.filter(n=>matches(n,k)).length;
+function renderSide(){
+  const mk=(k,label,cls='')=>`<button class="cat ${cls} ${current===k?'on':''}" data-cat="${k}">${label}<span class="n">${count(k)}</span></button>`;
+  sideEl.innerHTML=mk('all','전체')+mk('fav','즐겨찾기')+mk('unfiled','미분류')+`<h6>카테고리</h6>`+cats.map(c=>mk(c,c)).join('')+
+    `<button class="cat add" id="addCat">＋ 새 카테고리</button><div class="grow"></div>`+mk('trash','휴지통');
+  sideEl.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{current=b.dataset.cat;renderAll()});
+  $('#addCat').onclick=()=>{const name=prompt('카테고리 이름');if(name&&!cats.includes(name)){cats.push(name);current=name;renderAll()}};
+}
+function visible(){return notes.filter(n=>matches(n,current)).filter(n=>!query||blocks(n).join(' ').toLowerCase().includes(query.toLowerCase())).sort((a,b)=>(b.top?1:0)-(a.top?1:0))}
+function renderList(){
+  const v=visible();$('#hint').textContent=current==='trash'?'우클릭으로 복원하거나 완전히 삭제합니다.':current==='fav'?'별을 눌러 즐겨찾기에 넣고 뺍니다.':'';
+  if(!v.length){listEl.innerHTML=`<div class="empty">${query?'검색 결과가 없습니다':current==='trash'?'휴지통이 비어 있습니다':'메모가 없습니다.'}</div>';return}
+  listEl.innerHTML=v.map(n=>`<div class="item ${selected===n.id?'sel':''}" data-id="${n.id}" tabindex="0" style="--stripe:${n.color}">
+    <div class="t">${n.top?'<span class="glyph" title="목록 상단에 고정">📌</span>':''}<span>${esc(titleOf(n))}</span>${n.open?'<span class="open">펼침</span>':''}</div>
+    <div class="meta">${n.when}<button class="star ${n.fav?'on':''}" title="즐겨찾기">${STAR}</button></div>
+    <div class="p">${esc(previewOf(n))||'&nbsp;'}</div></div>`).join('');
+  listEl.querySelectorAll('.item').forEach(it=>{const n=byId(+it.dataset.id);
+    it.onclick=e=>{if(e.target.closest('.star'))return;selected=n.id;renderList();renderHead()};
+    it.ondblclick=()=>{if(!n.deleted)openNote(n)};
+    it.onkeydown=e=>{if(e.key==='Enter'&&!n.deleted)openNote(n)};
+    it.querySelector('.star').onclick=()=>{n.fav=!n.fav;renderAll()};
+    it.oncontextmenu=e=>{e.preventDefault();selected=n.id;renderList();renderHead();openMenu(e.clientX,e.clientY,n,n.deleted?'trash':'list')};
+  });
+}
+let headNote=null;
+function renderHead(rebuild=true){
+  const n=selected!=null?byId(selected):null;
+  if(!n||n.deleted){editpane.innerHTML='<div class="empty" style="margin:auto">왼쪽 목록에서 메모를 고르면 여기서 바로 편집합니다.<br>더블클릭하면 바탕화면에도 펼쳐집니다.</div>';headNote=null;return}
+  if(rebuild||headNote!==n){
+    editpane.innerHTML=`<div class="ed-head"><span class="dot"></span><span class="title"></span>
+      <button class="ib star" title="즐겨찾기">${STAR}</button><button class="ib top" title="목록 상단에 고정"><svg viewBox="0 0 24 24"><path class="fill" d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/><path d="M12 14v7"/></svg></button>
+      <button class="btn ghost sm open"></button></div><div class="fsnote"><span>Ctrl+휠로 이 메모의 글자 크기를 바꿉니다</span><span class="fs"></span></div>`;
+    const ed=bindEditor(document.createElement('div'),n);editpane.insertBefore(ed,editpane.querySelector('.fsnote'));
+    ed.addEventListener('wheel',e=>{if(e.ctrlKey){e.preventDefault();setFs(n,e.deltaY<0?1:-1)}},{passive:false});
+    editpane.querySelector('.star').onclick=()=>{n.fav=!n.fav;renderAll()};
+    editpane.querySelector('.top').onclick=()=>{n.top=!n.top;renderAll()};
+    editpane.querySelector('.open').onclick=()=>n.open?closeNote(n):openNote(n);
+    editpane.oncontextmenu=e=>{if(e.target.closest('.editor')){e.preventDefault();openMenu(e.clientX,e.clientY,n,'list')}};
+    headNote=n;
+  }
+  editpane.style.setProperty('--stripe',n.color);editpane.querySelector('.title').textContent=titleOf(n);
+  editpane.querySelector('.star').classList.toggle('on',!!n.fav);editpane.querySelector('.top').classList.toggle('on',!!n.top);
+  editpane.querySelector('.open').textContent=n.open?'창 닫기':'바탕화면에 펼치기';editpane.querySelector('.fs').textContent=`글자 ${n.fs}px`;
+}
+function renderAll(){renderSide();renderList();renderHead()}
+$('#q').addEventListener('input',e=>{query=e.target.value;renderList()});
+$('#newBtn').onclick=()=>createNote();
+$('#trayNew').onclick=()=>createNote();
+$('#trayBox').onclick=()=>{$('#box').style.zIndex=++z};
+$('#traySet').onclick=()=>{const s=$('#settings');s.hidden=false;s.style.zIndex=++z};
+$('#setClose').onclick=()=>{$('#settings').hidden=true};
+document.querySelectorAll('.sw2').forEach(b=>b.onclick=()=>{b.classList.toggle('on');b.setAttribute('aria-checked',b.classList.contains('on'))});
+document.querySelectorAll('.win').forEach(w=>w.addEventListener('pointerdown',()=>{w.style.zIndex=++z}));
+
+/* ── 컨텍스트 메뉴 ── */
+let menuNote=null, menuFrom='note';
+function openMenu(x,y,n,from){
+  closeMenus();menuNote=n;menuFrom=from;
+  const m=from==='trash'?$('#trashMenu'):$('#menu');
+  if(from!=='trash'){
+    const custom=!PALETTE.some(([c])=>c===n.color);
+    $('#swatches').innerHTML=PALETTE.map(([c,l])=>`<button class="sw ${n.color===c?'on':''}" data-c="${c}" title="${l}" style="--c:${c}"></button>`).join('')+
+      `<label class="sw custom ${custom?'on':''}" title="직접 고르기"><input type="color" value="${n.color}" aria-label="직접 고르기"></label>`;
+    $('#swatches').querySelectorAll('.sw[data-c]').forEach(b=>b.onclick=()=>{setColor(n,b.dataset.c);closeMenus()});
+    $('#swatches').querySelector('input').oninput=e=>setColor(n,e.target.value);
+    $('#pinChk').textContent=n.pinned?'✓':'';$('#favChk').textContent=n.fav?'✓':'';$('#topChk').textContent=n.top?'✓':'';
+    $('#toggleLabel').textContent=from==='note'?'메모함에서 보기':(n.open?'창 닫기':'바탕화면에 펼치기');
+    $('#catSub').innerHTML=[['미분류',null],...cats.map(c=>[c,c])].map(([l,v])=>`<button class="mi" data-cat="${v??''}"><span class="chk">${(n.cat??null)===v?'✓':''}</span>${l}</button>`).join('');
+    $('#catSub').querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{n.cat=b.dataset.cat||null;renderAll();closeMenus()});
+  }
+  m.hidden=false;const r=m.getBoundingClientRect();
+  m.style.left=Math.min(x,innerWidth-r.width-8)+'px';m.style.top=Math.min(y,innerHeight-r.height-8)+'px';
+}
+function closeMenus(){$('#menu').hidden=true;$('#trashMenu').hidden=true}
+document.querySelectorAll('.menu [data-act]').forEach(b=>b.onclick=()=>{const n=menuNote;closeMenus();if(!n)return;
+  switch(b.dataset.act){
+    case 'pin':togglePin(n);break;
+    case 'fav':n.fav=!n.fav;renderAll();break;
+    case 'top':n.top=!n.top;renderAll();break;
+    case 'toggle':if(menuFrom==='note'){selected=n.id;if(!matches(n,current))current='all';renderAll();$('#box').style.zIndex=++z}else if(n.open)closeNote(n);else openNote(n);break;
+    case 'del':delNote(n);break;
+    case 'restore':n.deleted=false;renderAll();toast('복원했습니다');break;
+    case 'purge':if(confirm('이 메모를 완전히 삭제할까요?')){notes=notes.filter(x=>x!==n);renderAll()}break;
+  }});
+document.addEventListener('pointerdown',e=>{if(!e.target.closest('.menu'))closeMenus()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeMenus();fmt.hidden=true}});
+
+/* ── 초기 렌더 ── */
+notes.filter(n=>n.open&&!n.deleted).forEach(n=>{n.z=++z;notesEl.appendChild(noteEl(n));paint(n)});
+renderAll();
+</script>
