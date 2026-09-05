@@ -333,10 +333,8 @@ function bindSubmenu(el: HTMLDivElement): void {
     // 버튼과 하위 메뉴 사이를 지날 때 깜빡이지 않게 조금 기다린다.
     timer = setTimeout(close, 160);
   });
-  btn.addEventListener('click', () => {
-    if (sub.classList.contains('open')) close();
-    else open();
-  });
+  // 클릭은 열기만 한다. 마우스가 올라오며 이미 열렸는데 클릭이 닫아 버리면 "눌렀는데 사라진" 것처럼 보인다.
+  btn.addEventListener('click', open);
 }
 
 function place(el: HTMLElement, x: number, y: number): void {
