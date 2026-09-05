@@ -143,10 +143,11 @@ async function start(root: HTMLElement, id: string): Promise<void> {
   // ── 뼈대 ──────────────────────────────────────────────────────────────────
   root.className = 'note';
   root.innerHTML =
+    // 핀은 왼쪽 위에 고정(고정된 메모는 항상 보인다), 그 오른쪽에 새 메모(+), 맨 오른쪽에 닫기.
     '<div class="note-bar" data-tauri-drag-region>' +
+    `<button class="nb pin" type="button" title="항상 위에 고정">${PIN_SVG}</button>` +
     '<button class="nb new" type="button" title="새 메모">＋</button>' +
     '<div class="nb-spacer" data-tauri-drag-region></div>' +
-    `<button class="nb pin" type="button" title="항상 위에 고정">${PIN_SVG}</button>` +
     '<button class="nb close" type="button" title="닫기 (메모함에 남음)">✕</button>' +
     '</div>' +
     '<div class="fschip" aria-hidden="true"></div>' +

@@ -112,6 +112,13 @@
 .ed-head .ib.star.on { color: var(--star); }
 .ed-head .ib svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ed-head .ib.on svg path.fill, .ed-head .ib.star.on svg { fill: currentColor; }
+/* 둘 이상 골랐을 때 편집 칸 자리에 오는 요약. */
+.ed-multi { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 32px; }
+.ed-multi[hidden] { display: none; }
+.ed-multi .n { font-size: 15px; font-weight: 600; color: var(--ink); }
+.ed-multi .acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.btn.danger { background: var(--danger); color: #fff; }
+
 .editpane .editor { flex: 1; overflow: auto; padding: 16px 22px 24px; max-width: 72ch; }
 .editpane .editor[hidden] { display: none; }
 .editpane .fsnote {

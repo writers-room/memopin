@@ -71,17 +71,17 @@ input,select{font:inherit}
   display:flex;flex-direction:column;overflow:hidden;resize:both;transition:box-shadow .18s ease}
 .note.dragging{transition:none}
 .note.dragging,.note.pinned{box-shadow:var(--shadow-lift)}
-.note-bar{height:24px;flex:none;background:transparent;display:flex;align-items:center;padding:0 3px;cursor:grab;user-select:none;transition:background .15s}
+.note-bar{height:22px;flex:none;background:transparent;display:flex;align-items:center;padding:0 3px;cursor:grab;user-select:none;transition:background .15s}
 .note:hover .note-bar{background:rgba(0,0,0,.06)}
 .note-bar:active{cursor:grabbing}
-.nb{width:28px;height:28px;border-radius:4px;display:grid;place-items:center;opacity:0;transition:opacity .15s,background .12s;color:var(--n-ink)}
+.nb{width:20px;height:20px;border-radius:4px;display:grid;place-items:center;opacity:0;transition:opacity .15s,background .12s;color:var(--n-ink)}
 .note:hover .nb{opacity:.72}
 .nb:hover{opacity:1 !important;background:rgba(0,0,0,.08)}
 .note.pinned .nb.pin{opacity:1}
 .nb svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .note.pinned .nb.pin svg path.fill{fill:currentColor}
 .nb-spacer{flex:1}
-.note .editor{flex:1;overflow:auto;padding:2px 14px 14px}
+.note .editor{flex:1;overflow:auto;padding:0 14px 14px}
 .note::after{content:'';position:absolute;right:3px;bottom:3px;width:10px;height:10px;
   border-right:2px solid currentColor;border-bottom:2px solid currentColor;opacity:.25;border-radius:1px;pointer-events:none}
 .fschip{position:absolute;right:14px;bottom:10px;padding:2px 8px;border-radius:999px;background:var(--n-ink);color:var(--n-bg);font-size:11px;opacity:0;transition:opacity .2s;pointer-events:none;font-variant-numeric:tabular-nums}
@@ -395,8 +395,8 @@ const STAR='<svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L
 function noteEl(n){
   const el=document.createElement('div');el.className='note';el.dataset.id=n.id;
   el.innerHTML=`<div class="note-bar" data-drag="note">
-    <button class="nb new" title="새 메모">＋</button><div class="nb-spacer"></div>
     <button class="nb pin" title="항상 위에 고정">${PIN}</button>
+    <button class="nb new" title="새 메모">＋</button><div class="nb-spacer"></div>
     <button class="nb close" title="닫기 (메모함에 남음)">✕</button></div><div class="fschip"></div>`;
   el.insertBefore(bindEditor(document.createElement('div'),n),el.querySelector('.fschip'));
   el.querySelector('.new').onclick=()=>createNote(n.color,n.cat,n.x+36,n.y+36);

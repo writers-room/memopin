@@ -37,7 +37,8 @@ interface Settings {
   autostart: boolean;          // 기본 false. 켜면 "--hidden" 인자로 등록
   theme: 'system' | 'light' | 'dark';  // 기본 'system'. 메모함·설정 창만 해당
   default_color: string;       // 기본 "#FFF4A3"
-  default_font_size: number;   // 기본 15
+  default_font_size: number;   // 기본 15. 새 메모(= 메모 창)의 글자 크기
+  box_font_size: number;       // 기본 14, 11..28. 메모함 편집 칸 전용. 메모의 font_size와 무관하다
   data_dir: string | null;     // null = 기본 폴더
 }
 ```
@@ -84,7 +85,7 @@ interface Settings {
 
 ## 창 라벨과 생명주기
 
-- `box`(메모함, 940×600, 최소 640×420, 일반 창), `settings`(520×auto, 크기 고정), `note-<id>`(320×320, 최소 200×140, `decorations:false`, `shadow:true`, `skip_taskbar:true`, `always_on_top` = note 값, 제목 "메모핀")
+- `box`(메모함, 창 제목은 "메모핀" — 사용자가 가장 많이 보는 창이라 앱 이름을 쓴다, 940×600, 최소 640×420, 일반 창), `settings`(520×auto, 크기 고정), `note-<id>`(320×320, 최소 200×140, `decorations:false`, `shadow:true`, `skip_taskbar:true`, `always_on_top` = note 값, 제목 "메모핀")
 - 프런트는 `getCurrentWindow().label`로 자기 역할을 안다. URL 쿼리는 쓰지 않는다
 - 창 생성은 `async` 커맨드 안에서 `run_on_main_thread` + 채널로 한다(동기 커맨드에서 하면 데드락). `WebviewWindowBuilder::from_config`로 만들고, 위치·크기는 만든 뒤 논리 픽셀로 적용
 - Windows에서는 만든 모든 창에 WM_ENTERSIZEMOVE 서브클래스를 설치한다(한글 조합 중 창 드래그 시 IME 끊김 방지, 서재에서 검증된 방법)

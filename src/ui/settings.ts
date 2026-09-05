@@ -159,6 +159,8 @@ function makeButton(text: string, cls = 'btn ghost sm'): HTMLButtonElement {
 }
 
 const FONT_SIZES = [13, 14, 15, 16, 18, 20] as const;
+/** 메모함 편집 칸 전용. 메모 창보다 작게 보는 쪽이라 아래가 더 촘촘하다. */
+const BOX_FONT_SIZES = [12, 13, 14, 15, 16, 18] as const;
 
 // ── 마운트 ───────────────────────────────────────────────────────────────────
 
@@ -205,6 +207,13 @@ export function mountSettings(root: HTMLElement): void {
   );
   defaultsRow.el.append(colorSelect, sizeSelect);
 
+  const boxSizeRow = makeRow(root, '메모함 글자 크기', '메모함 편집 칸에만 씁니다. 메모 창 크기는 그대로입니다');
+  const boxSizeSelect = makeSelect(
+    '메모함 글자 크기',
+    BOX_FONT_SIZES.map((n) => [String(n), `${n}px`] as const),
+  );
+  boxSizeRow.el.append(boxSizeSelect);
+
   // ── 동기화 ──
   section('동기화');
 
@@ -245,6 +254,7 @@ export function mountSettings(root: HTMLElement): void {
       colorSelect.value = settings.default_color;
     }
     sizeSelect.value = String(settings.default_font_size);
+    boxSizeSelect.value = String(settings.box_font_size);
     pathEl.textContent = settings.data_dir ?? '기본 폴더';
     pathEl.title = settings.data_dir ?? '기본 폴더';
     resetBtn.hidden = settings.data_dir === null;
@@ -309,6 +319,9 @@ export function mountSettings(root: HTMLElement): void {
   });
   sizeSelect.addEventListener('change', () => {
     void save({ default_font_size: Number(sizeSelect.value) }, defaultsRow);
+  });
+  boxSizeSelect.addEventListener('change', () => {
+    void save({ box_font_size: Number(boxSizeSelect.value) }, boxSizeRow);
   });
 
   // ── 저장 폴더 ──

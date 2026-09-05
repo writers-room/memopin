@@ -57,7 +57,10 @@ export interface Settings {
   /** 메모함·설정 창만 해당 */
   theme: Theme;
   default_color: string;
+  /** 새 메모(= 메모 창)의 글자 크기 */
   default_font_size: number;
+  /** 메모함 편집 칸 전용 글자 크기. 11..28, 기본 14. 메모의 font_size와 무관하다 */
+  box_font_size: number;
   /** null = 기본 폴더 */
   data_dir: string | null;
 }

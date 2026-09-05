@@ -27,6 +27,7 @@ const SETTINGS: Settings = {
   theme: 'dark',
   default_color: '#FFF4A3',
   default_font_size: 15,
+  box_font_size: 14,
   data_dir: 'D:\\Drive\\memopin',
 };
 
@@ -120,6 +121,17 @@ describe('mountSettings', () => {
     await flush();
     expect(api.updateSettings).toHaveBeenCalledWith({ autostart: true });
     expect(root.querySelector<HTMLElement>('.sw2[aria-label="자동 실행"]')!.classList.contains('on')).toBe(true);
+  });
+
+  it('메모함 글자 크기는 새 메모 기본값과 따로 저장한다', async () => {
+    mountSettings(root);
+    await flush();
+    const select = root.querySelector<HTMLSelectElement>('select[aria-label="메모함 글자 크기"]')!;
+    expect(select.value).toBe('14');
+    select.value = '12';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await flush();
+    expect(api.updateSettings).toHaveBeenCalledWith({ box_font_size: 12 });
   });
 
   it('저장이 실패하면 행 아래에 알리고 값은 되돌린다', async () => {

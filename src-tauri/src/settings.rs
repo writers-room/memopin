@@ -9,6 +9,9 @@ use tauri::{AppHandle, Manager, Runtime};
 use crate::store::{write_atomic, DEFAULT_COLOR, DEFAULT_FONT_SIZE};
 
 pub const DEFAULT_SHORTCUT: &str = "CommandOrControl+Shift+N";
+/// 메모함 편집 칸 글자 크기. 메모 창(`Note::font_size`)과 별개다 — 메모함은 목록을 훑는
+/// 창이라 더 작게 보고 싶다는 요청에서 나왔다.
+pub const DEFAULT_BOX_FONT_SIZE: u32 = 14;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -33,6 +36,9 @@ fn default_color() -> String {
 fn default_font_size() -> u32 {
     DEFAULT_FONT_SIZE
 }
+fn default_box_font_size() -> u32 {
+    DEFAULT_BOX_FONT_SIZE
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -48,6 +54,9 @@ pub struct Settings {
     pub default_color: String,
     #[serde(default = "default_font_size")]
     pub default_font_size: u32,
+    /// 메모함 편집 칸 전용. 옛 settings.json에는 없으므로 serde default로 채운다.
+    #[serde(default = "default_box_font_size")]
+    pub box_font_size: u32,
     #[serde(default)]
     pub data_dir: Option<String>,
 }
@@ -61,6 +70,7 @@ impl Default for Settings {
             theme: Theme::System,
             default_color: DEFAULT_COLOR.to_string(),
             default_font_size: DEFAULT_FONT_SIZE,
+            box_font_size: DEFAULT_BOX_FONT_SIZE,
             data_dir: None,
         }
     }
@@ -82,6 +92,8 @@ pub struct SettingsPatch {
     pub default_color: Option<String>,
     #[serde(default)]
     pub default_font_size: Option<u32>,
+    #[serde(default)]
+    pub box_font_size: Option<u32>,
     #[serde(default, deserialize_with = "double_option")]
     pub data_dir: Option<Option<String>>,
 }
@@ -147,4 +159,44 @@ pub fn default_data_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, Strin
         .app_data_dir()
         .map_err(|e| format!("데이터 폴더를 찾지 못했습니다: {e}"))?;
     Ok(dir.join("data"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// box_font_size가 없던 시절의 settings.json도 그대로 읽혀야 한다.
+    #[test]
+    fn old_settings_file_gets_default_box_font_size() {
+        // "#FFF4A3"의 #이 r#"..."#을 끊어 버려서 울타리를 하나 더 둘렀다.
+        let old = r##"{
+            "shortcut_enabled": true,
+            "shortcut": "CommandOrControl+Shift+N",
+            "autostart": false,
+            "theme": "dark",
+            "default_color": "#FFF4A3",
+            "default_font_size": 17,
+            "data_dir": null
+        }"##;
+        let s: Settings = serde_json::from_str(old).unwrap();
+        assert_eq!(s.box_font_size, DEFAULT_BOX_FONT_SIZE);
+        assert_eq!(s.default_font_size, 17);
+    }
+
+    #[test]
+    fn box_font_size_round_trips() {
+        let s: Settings = serde_json::from_str(r#"{"box_font_size": 12}"#).unwrap();
+        assert_eq!(s.box_font_size, 12);
+        assert_eq!(s.default_font_size, DEFAULT_FONT_SIZE);
+        let text = serde_json::to_string(&s).unwrap();
+        assert!(text.contains("\"box_font_size\":12"), "{text}");
+    }
+
+    #[test]
+    fn patch_carries_box_font_size_alone() {
+        let p: SettingsPatch = serde_json::from_str(r#"{"box_font_size": 18}"#).unwrap();
+        assert_eq!(p.box_font_size, Some(18));
+        assert_eq!(p.default_font_size, None);
+        assert!(p.data_dir.is_none());
+    }
 }

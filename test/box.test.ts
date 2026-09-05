@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   listCategories: vi.fn(),
   getSettings: vi.fn(),
   updateNote: vi.fn(),
+  updateSettings: vi.fn(),
   createNote: vi.fn(),
   deleteNote: vi.fn(),
   restoreNote: vi.fn(),
@@ -24,9 +25,16 @@ const api = vi.hoisted(() => ({
 vi.mock('../src/api.ts', () => api);
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'box' }) }));
 
-const { countFor, matchesQuery, matchesView, mountBox, sortNotes, visibleNotes } = await import(
-  '../src/ui/box.ts'
-);
+const {
+  clickSelection,
+  countFor,
+  matchesQuery,
+  matchesView,
+  mountBox,
+  pruneSelection,
+  sortNotes,
+  visibleNotes,
+} = await import('../src/ui/box.ts');
 const { relativeTime } = await import('../src/ui/time.ts');
 
 function note(over: Partial<Note> = {}): Note {
@@ -56,6 +64,7 @@ const SETTINGS: Settings = {
   theme: 'light',
   default_color: '#FFF4A3',
   default_font_size: 15,
+  box_font_size: 14,
   data_dir: null,
 };
 
@@ -131,6 +140,60 @@ describe('정렬', () => {
   });
 });
 
+describe('선택 상태 전이', () => {
+  const rows = ['a', 'b', 'c', 'd'];
+  const none = { ids: [] as string[], anchor: null };
+
+  it('그냥 누르면 그것 하나', () => {
+    expect(clickSelection(none, rows, 'b')).toEqual({ ids: ['b'], anchor: 'b' });
+    expect(clickSelection({ ids: ['a', 'b'], anchor: 'b' }, rows, 'c')).toEqual({
+      ids: ['c'],
+      anchor: 'c',
+    });
+  });
+
+  it('Ctrl은 더하고 빼며 기준을 옮긴다', () => {
+    const one = clickSelection(none, rows, 'b');
+    const two = clickSelection(one, rows, 'd', { ctrl: true });
+    expect(two).toEqual({ ids: ['b', 'd'], anchor: 'd' });
+    expect(clickSelection(two, rows, 'b', { ctrl: true })).toEqual({ ids: ['d'], anchor: 'b' });
+  });
+
+  it('Ctrl로 하나 남은 것을 빼면 선택이 빈다', () => {
+    expect(clickSelection({ ids: ['a'], anchor: 'a' }, rows, 'a', { ctrl: true }).ids).toEqual([]);
+  });
+
+  it('Shift는 기준부터 지금 항목까지 목록 순서대로', () => {
+    expect(clickSelection({ ids: ['b'], anchor: 'b' }, rows, 'd', { shift: true })).toEqual({
+      ids: ['b', 'c', 'd'],
+      anchor: 'b',
+    });
+    // 거꾸로 눌러도 목록 순서다. 기준은 그대로 남아 범위를 다시 잡을 수 있다.
+    expect(clickSelection({ ids: ['c'], anchor: 'c' }, rows, 'a', { shift: true })).toEqual({
+      ids: ['a', 'b', 'c'],
+      anchor: 'c',
+    });
+  });
+
+  it('기준이 없거나 목록에서 사라졌으면 지금 항목이 기준이 된다', () => {
+    expect(clickSelection(none, rows, 'c', { shift: true })).toEqual({ ids: ['c'], anchor: 'c' });
+    expect(clickSelection({ ids: [], anchor: 'zz' }, rows, 'c', { shift: true })).toEqual({
+      ids: ['c'],
+      anchor: 'c',
+    });
+  });
+
+  it('사라진 메모는 선택과 기준에서 빠진다', () => {
+    const alive = new Set(['a', 'c']);
+    expect(pruneSelection({ ids: ['a', 'b', 'c'], anchor: 'b' }, alive)).toEqual({
+      ids: ['a', 'c'],
+      anchor: null,
+    });
+    const kept = { ids: ['a'], anchor: 'a' };
+    expect(pruneSelection(kept, alive)).toBe(kept);
+  });
+});
+
 describe('상대 시각', () => {
   const now = new Date('2026-09-05T12:00:00Z');
   const ago = (ms: number): string => new Date(now.getTime() - ms).toISOString();
@@ -180,6 +243,12 @@ describe('mountBox', () => {
     api.getSettings.mockResolvedValue(SETTINGS);
     api.updateNote.mockImplementation((id: string) => Promise.resolve(notes.find((n) => n.id === id)));
     api.openNoteWindow.mockResolvedValue(undefined);
+    api.deleteNote.mockResolvedValue(undefined);
+    api.restoreNote.mockResolvedValue(undefined);
+    api.purgeNote.mockResolvedValue(undefined);
+    api.updateSettings.mockImplementation((patch: Partial<Settings>) =>
+      Promise.resolve({ ...SETTINGS, ...patch }),
+    );
     api.onSettingsChanged.mockResolvedValue(() => {});
     api.onStoreChanged.mockImplementation((cb: (p: StoreChanged) => void) => {
       storeCb = cb;
@@ -303,6 +372,155 @@ describe('mountBox', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(api.createCategory).toHaveBeenCalledWith('메모');
     expect(promptSpy).not.toHaveBeenCalled();
+  });
+
+  const click = (root: HTMLElement, id: string, mods: Partial<MouseEventInit> = {}): void => {
+    root
+      .querySelector<HTMLElement>(`.list .item[data-id=${id}]`)!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true, ...mods }));
+  };
+
+  it('Ctrl+클릭은 선택에 더하고 빼며 요약 화면을 보여 준다', async () => {
+    mountBox(root);
+    await flush();
+    click(root, 'n1');
+    click(root, 'n2', { ctrlKey: true });
+
+    expect([...root.querySelectorAll('.list .item.sel')].map((e) => (e as HTMLElement).dataset['id'])).toEqual([
+      'n1',
+      'n2',
+    ]);
+    expect(root.querySelector('.ed-multi')?.hasAttribute('hidden')).toBe(false);
+    expect(root.querySelector('.ed-multi .n')?.textContent).toBe('2개 선택됨');
+    expect(root.querySelector('.ed-head')?.hasAttribute('hidden')).toBe(true);
+    expect(root.querySelector<HTMLElement>('.editor')?.hidden).toBe(true);
+    expect(root.querySelector<HTMLElement>('.act-trash')!.hasAttribute('hidden')).toBe(false);
+    expect(root.querySelector<HTMLElement>('.act-purge')!.hasAttribute('hidden')).toBe(true);
+
+    // 다시 Ctrl+클릭하면 빠지고 하나짜리 선택으로 돌아온다.
+    click(root, 'n2', { ctrlKey: true });
+    expect(root.querySelector('.ed-multi')?.hasAttribute('hidden')).toBe(true);
+    expect(root.querySelector('.ed-head .title')?.textContent).toBe('첫째');
+  });
+
+  it('Shift+클릭은 기준부터 범위로 고른다', async () => {
+    mountBox(root);
+    await flush();
+    click(root, 'n1');
+    click(root, 'n2', { shiftKey: true });
+    expect(root.querySelector('.ed-multi .n')?.textContent).toBe('2개 선택됨');
+  });
+
+  it('선택 요약의 [휴지통으로 보내기]는 고른 수만큼 deleteNote를 부르고 선택을 푼다', async () => {
+    mountBox(root);
+    await flush();
+    click(root, 'n1');
+    click(root, 'n2', { ctrlKey: true });
+    root.querySelector<HTMLButtonElement>('.act-trash')!.click();
+    await flush();
+
+    expect(api.deleteNote.mock.calls.map((c) => c[0])).toEqual(['n1', 'n2']);
+    expect(root.querySelector('.list .item.sel')).toBeNull();
+    expect(root.querySelector('.ed-multi')?.hasAttribute('hidden')).toBe(true);
+    expect(root.querySelector('.ed-empty')?.hasAttribute('hidden')).toBe(false);
+  });
+
+  it('목록에서 Delete를 누르면 고른 것을 모두 휴지통으로 보낸다', async () => {
+    mountBox(root);
+    await flush();
+    click(root, 'n1');
+    click(root, 'n2', { ctrlKey: true });
+    root
+      .querySelector<HTMLElement>('.list .item[data-id=n2]')!
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    await flush();
+    expect(api.deleteNote.mock.calls.map((c) => c[0])).toEqual(['n1', 'n2']);
+  });
+
+  it('휴지통 보기에서는 Delete가 확인을 받고 완전히 삭제한다', async () => {
+    mountBox(root);
+    await flush();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    root.querySelector<HTMLElement>('.side .cat[data-view=trash]')!.click();
+    click(root, 'n3');
+    expect(root.querySelector<HTMLElement>('.act-restore')).toBeTruthy();
+
+    root
+      .querySelector<HTMLElement>('.list .item[data-id=n3]')!
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    await flush();
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(api.purgeNote.mock.calls.map((c) => c[0])).toEqual(['n3']);
+    expect(api.deleteNote).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('휴지통에서 여럿을 고르면 복원·완전 삭제 버튼이 나온다', async () => {
+    notes.push(note({ id: 'n4', text: '버린것2', deleted_at: '2026-09-02T00:00:00Z' }));
+    mountBox(root);
+    await flush();
+    root.querySelector<HTMLElement>('.side .cat[data-view=trash]')!.click();
+    click(root, 'n3');
+    click(root, 'n4', { ctrlKey: true });
+    expect(root.querySelector<HTMLElement>('.act-restore')!.hasAttribute('hidden')).toBe(false);
+    expect(root.querySelector<HTMLElement>('.act-purge')!.hasAttribute('hidden')).toBe(false);
+    expect(root.querySelector<HTMLElement>('.act-trash')!.hasAttribute('hidden')).toBe(true);
+
+    root.querySelector<HTMLButtonElement>('.act-restore')!.click();
+    await flush();
+    expect(api.restoreNote.mock.calls.map((c) => c[0])).toEqual(['n3', 'n4']);
+  });
+
+  it('여럿 고른 채 보기를 옮기면 선택이 풀린다', async () => {
+    mountBox(root);
+    await flush();
+    click(root, 'n1');
+    click(root, 'n2', { ctrlKey: true });
+    root.querySelector<HTMLElement>('.side .cat[data-view=trash]')!.click();
+    expect(root.querySelector('.ed-multi')?.hasAttribute('hidden')).toBe(true);
+    expect(root.querySelector('.ed-empty')?.hasAttribute('hidden')).toBe(false);
+  });
+
+  it('사라진 메모는 선택에서 빠진다', async () => {
+    mountBox(root);
+    await flush();
+    click(root, 'n1');
+    click(root, 'n2', { ctrlKey: true });
+    notes = notes.filter((n) => n.id !== 'n2');
+    storeCb!({ kind: 'notes', ids: ['n2'], source: 'fs' });
+    await flush();
+    expect(root.querySelector('.ed-multi')?.hasAttribute('hidden')).toBe(true);
+    expect(root.querySelector('.ed-head .title')?.textContent).toBe('첫째');
+  });
+
+  it('편집 칸은 메모의 font_size가 아니라 설정의 box_font_size를 쓴다', async () => {
+    api.getSettings.mockResolvedValue({ ...SETTINGS, box_font_size: 12 });
+    mountBox(root);
+    await flush();
+    click(root, 'n1'); // 이 메모의 font_size는 15다
+    expect(root.querySelector<HTMLElement>('.editor')!.style.getPropertyValue('--fs')).toBe('12px');
+    expect(root.querySelector('.fsnote .fs')?.textContent).toBe('메모함 글자 12px');
+  });
+
+  it('Ctrl+휠은 설정만 바꾸고 메모의 font_size는 건드리지 않는다', async () => {
+    mountBox(root);
+    await flush();
+    click(root, 'n1');
+    const editor = root.querySelector<HTMLElement>('.editor')!;
+    editor.dispatchEvent(new WheelEvent('wheel', { ctrlKey: true, deltaY: -1, bubbles: true, cancelable: true }));
+    expect(editor.style.getPropertyValue('--fs')).toBe('15px');
+    expect(root.querySelector('.fsnote .fs')?.textContent).toBe('메모함 글자 15px');
+
+    await new Promise((r) => setTimeout(r, 350)); // 저장 디바운스 300ms
+    expect(api.updateSettings).toHaveBeenCalledWith({ box_font_size: 15 });
+    expect(api.updateNote).not.toHaveBeenCalled();
+
+    // Ctrl+0은 메모함 기본값 14로.
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: '0', ctrlKey: true, bubbles: true, cancelable: true }));
+    expect(editor.style.getPropertyValue('--fs')).toBe('14px');
+    await new Promise((r) => setTimeout(r, 350));
+    expect(api.updateSettings).toHaveBeenLastCalledWith({ box_font_size: 14 });
+    expect(api.updateNote).not.toHaveBeenCalled();
   });
 
   it('새 메모는 지금 보기의 카테고리를 물려받고 창을 연다', async () => {

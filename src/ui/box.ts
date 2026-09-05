@@ -9,6 +9,11 @@
  *     전에 flush 한다. 색은 색 대화상자를 끄는 동안 input이 쉼 없이 오기 때문에 디바운스가 필요하다.
  *  3. `store:changed`의 source가 내 라벨이면 편집기 본문을 건드리지 않는다(커서 튐 방지).
  *     다른 창·파일 감시가 일으킨 변경만 반영하고, 그때도 포커스가 편집기에 있으면 blur까지 미룬다.
+ *  4. 편집 칸의 글자 크기는 메모의 `font_size`(= 메모 창 크기)가 아니라 설정의 `box_font_size`다.
+ *     메모함은 목록을 훑는 창이라 따로 작게 두고 싶다는 요청에서 갈라졌다. 여기서 Ctrl+휠을
+ *     돌려도 메모 창 글자 크기는 그대로다.
+ *  5. 선택은 배열이다. 하나면 지금까지와 똑같이 편집 칸이 열리고, 둘 이상이면 편집 칸 대신
+ *     선택 요약이 나온다. 상태 전이는 순수 함수 `clickSelection`에 있다(테스트가 여기를 본다).
  */
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
@@ -29,6 +34,7 @@ import {
   renameCategory,
   restoreNote,
   updateNote,
+  updateSettings,
   showSettings,
 } from '../api.ts';
 import { attachFormatToolbar, createEditor, previewOf, titleOf } from '../editor/index.ts';
@@ -81,6 +87,53 @@ export function countFor(notes: readonly Note[], view: View): number {
   return notes.reduce((n, note) => n + (matchesView(note, view) ? 1 : 0), 0);
 }
 
+// ── 선택(순수 함수. 테스트가 여기를 본다) ───────────────────────────────────
+
+/** 고른 메모들. `anchor`는 Shift 범위의 기준(마지막으로 그냥·Ctrl로 누른 항목). */
+export interface Selection {
+  ids: string[];
+  anchor: string | null;
+}
+
+export const NO_SELECTION: Selection = { ids: [], anchor: null };
+
+/**
+ * 목록 항목을 눌렀을 때의 다음 선택.
+ * - 그냥 누르면 그것 하나(지금까지와 같다)
+ * - Ctrl(또는 Cmd)이면 더하거나 뺀다
+ * - Shift면 기준부터 지금 항목까지 목록 순서대로. 기준이 사라졌으면 지금 항목이 기준이 된다
+ *
+ * `rows`는 지금 화면에 보이는 순서다(`visibleNotes`의 결과).
+ */
+export function clickSelection(
+  prev: Selection,
+  rows: readonly string[],
+  id: string,
+  mods: { ctrl?: boolean; shift?: boolean } = {},
+): Selection {
+  if (mods.shift) {
+    const anchor = prev.anchor !== null && rows.includes(prev.anchor) ? prev.anchor : id;
+    const a = rows.indexOf(anchor);
+    const b = rows.indexOf(id);
+    if (a === -1 || b === -1) return { ids: [id], anchor: id };
+    const [lo, hi] = a <= b ? [a, b] : [b, a];
+    return { ids: rows.slice(lo, hi + 1), anchor };
+  }
+  if (mods.ctrl) {
+    const ids = prev.ids.includes(id) ? prev.ids.filter((x) => x !== id) : [...prev.ids, id];
+    return { ids, anchor: id };
+  }
+  return { ids: [id], anchor: id };
+}
+
+/** 사라진 메모는 선택에서 뺀다(다른 창이 지웠거나 동기화로 없어진 경우). */
+export function pruneSelection(prev: Selection, alive: ReadonlySet<string>): Selection {
+  const ids = prev.ids.filter((id) => alive.has(id));
+  const anchor = prev.anchor !== null && alive.has(prev.anchor) ? prev.anchor : null;
+  if (ids.length === prev.ids.length && anchor === prev.anchor) return prev;
+  return { ids, anchor };
+}
+
 // ── 자잘한 도구 ──────────────────────────────────────────────────────────────
 
 const STAR_SVG =
@@ -90,6 +143,16 @@ const PIN_SVG =
 const SEARCH_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>';
 const EMPTY_TEXT = '왼쪽 목록에서 메모를 고르면 여기서 바로 편집합니다.<br>더블클릭하면 바탕화면에도 펼칩니다.';
+
+/** 메모함 편집 칸 글자 크기. 계약의 `box_font_size` 기본값과 같아야 한다. */
+const DEFAULT_BOX_FONT_SIZE = 14;
+const MIN_FONT_SIZE = 11;
+const MAX_FONT_SIZE = 28;
+
+function clampFontSize(px: number): number {
+  if (!Number.isFinite(px)) return DEFAULT_BOX_FONT_SIZE;
+  return Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, Math.round(px)));
+}
 
 function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
@@ -141,7 +204,8 @@ export function mountBox(root: HTMLElement): void {
   let cats: Category[] = [];
   let view: View = 'all';
   let query = '';
-  let selectedId: string | null = null;
+  let sel: Selection = NO_SELECTION;
+  let boxFontSize = DEFAULT_BOX_FONT_SIZE;
   let catEdit: CatEdit | null = null;
   /** 포커스 때문에 미뤄 둔 외부 변경 본문. blur 때 넣는다. */
   let pendingHtml: string | null = null;
@@ -176,10 +240,18 @@ export function mountBox(root: HTMLElement): void {
     `<button class="ib star" type="button" title="즐겨찾기">${STAR_SVG}</button>` +
     `<button class="ib top" type="button" title="목록 상단에 고정">${PIN_SVG}</button>` +
     '<button class="btn ghost sm open" type="button"></button></div>' +
-    '<div class="fsnote" hidden><span>Ctrl+휠로 이 메모의 글자 크기를 바꾸고, Ctrl+0으로 기본 크기로 돌아갑니다</span><span class="fs"></span></div>' +
+    '<div class="ed-multi" hidden><div class="n"></div><div class="acts">' +
+    '<button class="btn act-trash" type="button">휴지통으로 보내기</button>' +
+    '<button class="btn act-restore" type="button" hidden>복원</button>' +
+    '<button class="btn danger act-purge" type="button" hidden>완전히 삭제</button>' +
+    '<button class="btn ghost act-clear" type="button">선택 해제</button>' +
+    '</div></div>' +
+    '<div class="fsnote" hidden><span>Ctrl+휠로 바꾸고 Ctrl+0으로 되돌립니다. 메모 창 글자 크기는 그대로입니다</span>' +
+    '<span class="fs"></span></div>' +
     '</div>';
 
-  const pick = <T extends HTMLElement>(sel: string): T => root.querySelector<T>(sel)!;
+  // 인자 이름이 css인 것은 위의 선택 상태 `sel`을 가리지 않기 위해서다.
+  const pick = <T extends HTMLElement>(css: string): T => root.querySelector<T>(css)!;
   const side = pick<HTMLElement>('.side');
   const listEl = pick<HTMLElement>('.list');
   const hintEl = pick<HTMLElement>('.hint');
@@ -189,11 +261,12 @@ export function mountBox(root: HTMLElement): void {
   const editpane = pick<HTMLElement>('.editpane');
   const edEmpty = pick<HTMLElement>('.ed-empty');
   const edHead = pick<HTMLElement>('.ed-head');
+  const edMulti = pick<HTMLElement>('.ed-multi');
   const fsNote = pick<HTMLElement>('.fsnote');
 
   const editor = createEditor({
     onChange: (html, text) => {
-      const id = selectedId;
+      const id = soleId();
       if (id === null) return;
       const note = byId(id);
       if (note) {
@@ -227,7 +300,12 @@ export function mountBox(root: HTMLElement): void {
 
   // ── 도우미 ──
   const byId = (id: string): Note | undefined => notes.find((n) => n.id === id);
-  const selected = (): Note | null => (selectedId === null ? null : (byId(selectedId) ?? null));
+  /** 편집 칸은 딱 하나 골랐을 때만 열린다. */
+  const soleId = (): string | null => (sel.ids.length === 1 ? sel.ids[0]! : null);
+  const selected = (): Note | null => {
+    const id = soleId();
+    return id === null ? null : (byId(id) ?? null);
+  };
 
   let errTimer: ReturnType<typeof setTimeout> | null = null;
   function fail(e: unknown): void {
@@ -255,6 +333,8 @@ export function mountBox(root: HTMLElement): void {
       ]);
       notes = freshNotes;
       cats = freshCats;
+      // 다른 창이 지웠거나 동기화로 사라진 메모는 선택에서 뺀다.
+      sel = pruneSelection(sel, new Set(notes.map((n) => n.id)));
     } catch (e) {
       fail(e);
     }
@@ -275,6 +355,9 @@ export function mountBox(root: HTMLElement): void {
     b.append(name, n);
     b.addEventListener('click', () => {
       view = v;
+      // 여럿 고른 채 보기를 옮기면 요약의 버튼(휴지통 보기냐 아니냐)이 고른 것과 어긋난다.
+      // 하나짜리 선택은 지금까지처럼 보기를 옮겨도 편집 칸에 그대로 남는다.
+      if (sel.ids.length > 1) sel = NO_SELECTION;
       renderAll();
     });
     return b;
@@ -437,9 +520,10 @@ export function mountBox(root: HTMLElement): void {
       .map((n) => {
         const title = titleOf(n.text) || '(빈 메모)';
         const preview = previewOf(n.text);
+        const on = sel.ids.includes(n.id);
         return (
-          `<div class="item ${n.id === selectedId ? 'sel' : ''}" data-id="${esc(n.id)}" tabindex="0" role="option"` +
-          ` aria-selected="${n.id === selectedId}" style="--stripe:${stripe(n)}">` +
+          `<div class="item ${on ? 'sel' : ''}" data-id="${esc(n.id)}" tabindex="0" role="option"` +
+          ` aria-selected="${on}" style="--stripe:${stripe(n)}">` +
           `<div class="t">${n.list_pinned ? '<span class="glyph" title="목록 상단에 고정">📌</span>' : ''}` +
           `<span>${esc(title)}</span>${n.is_open ? '<span class="open">펼침</span>' : ''}</div>` +
           `<div class="meta">${esc(relativeTime(n.updated_at))}` +
@@ -464,13 +548,20 @@ export function mountBox(root: HTMLElement): void {
       void patch(note.id, { favorite: !note.favorite });
       return;
     }
-    select(note.id);
+    const rows = visibleNotes(notes, view, query).map((n) => n.id);
+    setSelection(clickSelection(sel, rows, note.id, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }));
   });
   listEl.addEventListener('dblclick', (e) => {
     const note = itemNote(e);
     if (note && note.deleted_at === null) openNoteWindow(note.id).catch(fail);
   });
   listEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Delete') {
+      if (sel.ids.length === 0) return;
+      e.preventDefault();
+      void (view === 'trash' ? purgeSelected() : trashSelected());
+      return;
+    }
     if (e.key !== 'Enter') return;
     const note = itemNote(e);
     if (note && note.deleted_at === null) openNoteWindow(note.id).catch(fail);
@@ -511,16 +602,34 @@ export function mountBox(root: HTMLElement): void {
   }
 
   // ── 편집 칸 ──
-  function select(id: string | null): void {
-    if (id === selectedId) return;
+  function sameIds(a: readonly string[], b: readonly string[]): boolean {
+    return a.length === b.length && a.every((id, i) => id === b[i]);
+  }
+
+  function setSelection(next: Selection): void {
+    if (sameIds(sel.ids, next.ids) && sel.anchor === next.anchor) return;
+    const before = soleId();
     saveText.flush();
     saveFont.flush();
     saveColor.flush();
-    pendingHtml = null;
-    selectedId = id;
-    if (document.activeElement === editor.el) editor.el.blur();
+    sel = next;
+    const after = soleId();
+    // 편집 중인 메모가 바뀔 때만 편집기를 갈아 끼운다(같은 메모면 커서를 지키기 위해 그대로).
+    const swapped = before !== after;
+    if (swapped) {
+      pendingHtml = null;
+      if (document.activeElement === editor.el) editor.el.blur();
+    }
     renderList();
-    renderEditor(true);
+    renderEditor(swapped);
+  }
+
+  function select(id: string | null): void {
+    setSelection(id === null ? NO_SELECTION : { ids: [id], anchor: id });
+  }
+
+  function clearSelection(): void {
+    setSelection(NO_SELECTION);
   }
 
   function renderHeadText(note: Note): void {
@@ -528,9 +637,21 @@ export function mountBox(root: HTMLElement): void {
   }
 
   function renderEditor(loadHtml: boolean): void {
+    // 둘 이상 골랐으면 편집 칸 대신 선택 요약이다.
+    if (sel.ids.length > 1) {
+      edEmpty.hidden = true;
+      edHead.hidden = true;
+      fsNote.hidden = true;
+      editor.el.hidden = true;
+      edMulti.hidden = false;
+      renderMulti();
+      return;
+    }
+    edMulti.hidden = true;
+
     const note = selected();
     if (!note) {
-      selectedId = null;
+      sel = NO_SELECTION;
       edEmpty.hidden = false;
       edHead.hidden = true;
       fsNote.hidden = true;
@@ -553,8 +674,7 @@ export function mountBox(root: HTMLElement): void {
     const openBtn = pick<HTMLButtonElement>('.ed-head .open');
     openBtn.textContent = note.is_open ? '창 닫기' : '바탕화면에 펼치기';
     openBtn.hidden = note.deleted_at !== null;
-    pick<HTMLElement>('.fsnote .fs').textContent = `글자 ${note.font_size}px`;
-    editor.setFontSize(note.font_size);
+    renderFsNote();
 
     if (loadHtml) {
       if (editor.setHtml(note.html)) pendingHtml = null;
@@ -576,29 +696,71 @@ export function mountBox(root: HTMLElement): void {
     (note.is_open ? closeNoteWindow(note.id) : openNoteWindow(note.id)).catch(fail);
   });
 
+  function renderFsNote(): void {
+    pick<HTMLElement>('.fsnote .fs').textContent = `메모함 글자 ${boxFontSize}px`;
+    editor.setFontSize(boxFontSize);
+  }
+
   function bumpFontSize(delta: 1 | -1): void {
-    const note = selected();
-    if (!note) return;
-    applyFontSize(Math.max(11, Math.min(28, note.font_size + delta)));
+    applyFontSize(clampFontSize(boxFontSize + delta));
   }
 
-  /** Ctrl+0: 설정의 기본 글자 크기로. */
+  /** Ctrl+0: 메모함 기본 글자 크기로. 메모의 font_size와는 상관없다. */
   function resetFontSize(): void {
-    void getSettings()
-      .then((s) => applyFontSize(Math.max(11, Math.min(28, s.default_font_size))))
-      .catch((err) => console.error(err));
+    applyFontSize(DEFAULT_BOX_FONT_SIZE);
   }
 
+  /** 메모함 편집 칸 전용 크기다. 메모(`font_size`)는 건드리지 않고 설정에 저장한다. */
   function applyFontSize(size: number): void {
-    const note = selected();
-    if (!note) return;
-    if (size === note.font_size) return;
-    note.font_size = size;
-    editor.setFontSize(size);
-    pick<HTMLElement>('.fsnote .fs').textContent = `글자 ${size}px`;
-    const id = note.id;
-    saveFont.schedule(() => void patch(id, { font_size: size }));
+    if (size === boxFontSize) return;
+    boxFontSize = size;
+    renderFsNote();
+    saveFont.schedule(() => {
+      void updateSettings({ box_font_size: size }).catch(fail);
+    });
   }
+
+  /** 설정 창이나 다른 창에서 바뀐 값을 받는다(저장은 하지 않는다). */
+  function setBoxFontSize(size: number): void {
+    const next = clampFontSize(size);
+    if (next === boxFontSize) return;
+    boxFontSize = next;
+    renderFsNote();
+  }
+
+  // ── 여러 개 선택 ──
+  function renderMulti(): void {
+    const trash = view === 'trash';
+    pick<HTMLElement>('.ed-multi .n').textContent = `${sel.ids.length}개 선택됨`;
+    pick<HTMLButtonElement>('.act-trash').hidden = trash;
+    pick<HTMLButtonElement>('.act-restore').hidden = !trash;
+    pick<HTMLButtonElement>('.act-purge').hidden = !trash;
+  }
+
+  /** 하나씩 순서대로. 중간에 실패하면 알리고 멈춘다. 끝나면 선택을 푼다. */
+  async function eachSelected(run: (id: string) => Promise<void>): Promise<void> {
+    const ids = [...sel.ids];
+    if (ids.length === 0) return;
+    try {
+      for (const id of ids) await run(id);
+    } catch (e) {
+      fail(e);
+    }
+    clearSelection();
+  }
+
+  const trashSelected = (): Promise<void> => eachSelected((id) => deleteNote(id));
+  const restoreSelected = (): Promise<void> => eachSelected((id) => restoreNote(id));
+  async function purgeSelected(): Promise<void> {
+    if (sel.ids.length === 0) return;
+    if (!window.confirm(`선택한 메모 ${sel.ids.length}개를 완전히 삭제할까요?\n되돌릴 수 없습니다.`)) return;
+    await eachSelected((id) => purgeNote(id));
+  }
+
+  pick<HTMLButtonElement>('.act-trash').addEventListener('click', () => void trashSelected());
+  pick<HTMLButtonElement>('.act-restore').addEventListener('click', () => void restoreSelected());
+  pick<HTMLButtonElement>('.act-purge').addEventListener('click', () => void purgeSelected());
+  pick<HTMLButtonElement>('.act-clear').addEventListener('click', () => clearSelection());
 
   // ── 우클릭 메뉴 ──
   function showMenu(x: number, y: number, note: Note): void {
@@ -617,7 +779,7 @@ export function mountBox(root: HTMLElement): void {
       case 'color': {
         note.color = action.color;
         renderList();
-        if (note.id === selectedId) renderEditor(false);
+        if (note.id === soleId()) renderEditor(false);
         saveColor.schedule(() => void patch(note.id, { color: action.color }));
         return;
       }
@@ -680,7 +842,9 @@ export function mountBox(root: HTMLElement): void {
 
   void (async () => {
     try {
-      applyTheme((await getSettings()).theme);
+      const s = await getSettings();
+      applyTheme(s.theme);
+      boxFontSize = clampFontSize(s.box_font_size);
     } catch (e) {
       fail(e);
     }
@@ -688,7 +852,10 @@ export function mountBox(root: HTMLElement): void {
     renderAll(true);
   })();
 
-  void onSettingsChanged((s) => applyTheme(s.theme));
+  void onSettingsChanged((s) => {
+    applyTheme(s.theme);
+    setBoxFontSize(s.box_font_size);
+  });
   void onStoreChanged((p) => {
     void (async () => {
       const mine = p.source === myLabel;

@@ -247,6 +247,9 @@ pub fn update_settings(
         if let Some(v) = patch.default_font_size {
             s.default_font_size = v;
         }
+        if let Some(v) = patch.box_font_size {
+            s.box_font_size = v;
+        }
         settings::save(&app, &s)?;
     }
 
