@@ -34,6 +34,7 @@ const SETTINGS: Settings = {
   recent_colors: [],
   favorite_colors: [],
   data_dir: null,
+  guide_seeded: false,
 };
 
 const CATS: Category[] = [{ id: 'c1', name: '집필', sort: 0, created_at: '2026-09-01T00:00:00Z' }];
@@ -54,6 +55,8 @@ function note(over: Partial<Note> = {}): Note {
     created_at: '2026-09-01T00:00:00Z',
     updated_at: '2026-09-01T00:00:00Z',
     deleted_at: null,
+    kind: 'text',
+    image: null,
     ...over,
   };
 }

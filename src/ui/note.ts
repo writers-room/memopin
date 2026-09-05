@@ -9,14 +9,19 @@
  *     되돌아온 것이라 innerHTML을 갈아 끼우면 캐럿이 튄다. 색·고정·글자 크기만 반영한다.
  *  3. 편집 중(포커스가 편집기 안)에는 setHtml이 false를 돌려준다. 그때는 pendingHtml에 두고
  *     blur 뒤에 반영한다.
+ *
+ * 이미지 메모(`kind === 'image'`)는 편집기 대신 그림 하나를 창에 꽉 채운다. 다른 것은 같다 —
+ * 띠·우클릭 메뉴·색은 그대로고, 색은 이제 그림 뒤 여백에만 보인다. 다만 크기는 비율을 지켜야
+ * 해서 여기서만 `setSize`를 부른다(그 결과를 Rust가 평소처럼 `window`에 저장한다).
  */
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { LogicalSize, getCurrentWindow } from '@tauri-apps/api/window';
 
 import {
   closeNoteWindow,
   createNote,
   deleteNote,
   getNote,
+  imageUrl,
   listCategories,
   onStoreChanged,
   openNoteWindow,
@@ -24,7 +29,7 @@ import {
   updateNote,
   getSettings,
 } from '../api.ts';
-import { attachFormatToolbar, createEditor } from '../editor/index.ts';
+import { attachFormatToolbar, createEditor, type Editor } from '../editor/index.ts';
 import type { Category, Note, NotePatch, StoreChanged } from '../types.ts';
 import { applyNoteColor } from './colors.ts';
 import { openContextMenu, type MenuAction } from './context-menu.ts';
@@ -33,6 +38,19 @@ import './note.css';
 /** 계약의 font_size 범위. */
 export const MIN_FONT_SIZE = 11;
 export const MAX_FONT_SIZE = 28;
+
+/** 이미지 메모 창의 최소 가로(논리 픽셀). 이보다 좁으면 띠 버튼도 들어가지 않는다. */
+export const MIN_IMAGE_W = 120;
+/** 화면 폭을 읽지 못할 때 쓰는 최대 가로. */
+const FALLBACK_MAX_W = 4000;
+/** Ctrl+0으로 되돌아가는 가로. 계약의 기본 창 크기와 같다. */
+const IMAGE_RESET_W = 320;
+/** Ctrl+휠 한 칸. */
+const ZOOM_STEP = 1.1;
+/** 손잡이로 끈 뒤 비율을 다시 맞추기까지. */
+const RESIZE_MS = 200;
+/** 내가 setSize한 직후에 오는 Resized는 무시한다. */
+const SELF_SIZE_MS = 500;
 
 const SAVE_MS = 400;
 const FONT_SAVE_MS = 300;
@@ -48,6 +66,21 @@ const STAR_SVG =
 export function clampFontSize(px: number): number {
   if (!Number.isFinite(px)) return MIN_FONT_SIZE;
   return Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, Math.round(px)));
+}
+
+/**
+ * 이미지 메모 창 크기. 원본 비율(w0:h0)을 지키면서 가로를 `newW`로 맞춘다.
+ * 가로는 `MIN_IMAGE_W`와 `maxW` 사이로 자른다. 논리 픽셀 정수.
+ */
+export function fitSize(w0: number, h0: number, newW: number, maxW = FALLBACK_MAX_W): {
+  w: number;
+  h: number;
+} {
+  const ratio = w0 > 0 && h0 > 0 ? h0 / w0 : 1;
+  const top = Math.max(MIN_IMAGE_W, Number.isFinite(maxW) ? maxW : FALLBACK_MAX_W);
+  const wanted = Number.isFinite(newW) ? newW : MIN_IMAGE_W;
+  const w = Math.round(Math.min(Math.max(wanted, MIN_IMAGE_W), top));
+  return { w, h: Math.max(1, Math.round(w * ratio)) };
 }
 
 /** 이 이벤트가 내 메모를 다시 읽어야 할 만한 것인지. */
@@ -127,6 +160,7 @@ async function start(root: HTMLElement, id: string): Promise<void> {
   };
   await refreshCategories();
 
+  const isImage = note.kind === 'image';
   let fontSize = clampFontSize(note.font_size);
 
   // ── 저장 ──────────────────────────────────────────────────────────────────
@@ -143,11 +177,12 @@ async function start(root: HTMLElement, id: string): Promise<void> {
   };
 
   // ── 뼈대 ──────────────────────────────────────────────────────────────────
-  root.className = 'note';
+  root.className = isImage ? 'note image' : 'note';
   root.innerHTML =
     // 왼쪽부터 핀·별·새 메모(+), 맨 오른쪽에 닫기. 쉼에서는 걸려 있는 핀과 즐겨찾기 별만
     // 보이고 나머지는 자리째 접힌다(note.css). 그래서 핀 없이 즐겨찾기만 한 메모는 별이
     // 왼쪽 맨 끝에 온다. 순서는 DOM 그대로고 CSS가 display로만 여닫는다.
+    // 이미지 메모에서는 이 띠가 그림 위에 겹쳐 뜬다(note.css의 .note.image).
     '<div class="note-bar" data-tauri-drag-region>' +
     `<button class="nb pin" type="button" title="항상 위에 고정">${PIN_SVG}</button>` +
     `<button class="nb star" type="button" title="즐겨찾기">${STAR_SVG}</button>` +
@@ -155,40 +190,56 @@ async function start(root: HTMLElement, id: string): Promise<void> {
     '<div class="nb-spacer" data-tauri-drag-region></div>' +
     '<button class="nb close" type="button" title="닫기 (메모함에 남음)">✕</button>' +
     '</div>' +
-    '<div class="fschip" aria-hidden="true"></div>' +
+    // 글자 크기 칩은 편집기가 있을 때만. 이미지 메모에는 글자 크기가 없다.
+    (isImage ? '' : '<div class="fschip" aria-hidden="true"></div>') +
     '<div class="note-resize" aria-hidden="true"></div>';
 
   const bar = root.querySelector<HTMLElement>('.note-bar')!;
-  const chip = root.querySelector<HTMLElement>('.fschip')!;
+  const chip = root.querySelector<HTMLElement>('.fschip');
   const handle = root.querySelector<HTMLElement>('.note-resize')!;
 
-  const editor = createEditor({
-    onChange: (html, text) => {
-      note.html = html;
-      note.text = text;
-      saveBody.push({ html, text });
-    },
-    onFontSizeDelta: (delta) => applyFontSize(clampFontSize(fontSize + delta)),
-    onFontSizeReset: () => {
-      void getSettings()
-        .then((s) => applyFontSize(clampFontSize(s.default_font_size)))
-        .catch((err) => console.error(err));
-    },
-  });
+  /** 이미지 메모에는 편집기가 없다. 본문(곁들인 텍스트)은 메모함에서만 고친다. */
+  let editor: Editor | null = null;
+
+  if (isImage) {
+    const img = document.createElement('img');
+    img.className = 'note-img';
+    img.draggable = false;
+    img.alt = note.image?.name ?? '';
+    img.src = imageUrl(id);
+    root.insertBefore(img, handle);
+  } else {
+    editor = createEditor({
+      onChange: (html, text) => {
+        note.html = html;
+        note.text = text;
+        saveBody.push({ html, text });
+      },
+      onFontSizeDelta: (delta) => applyFontSize(clampFontSize(fontSize + delta)),
+      onFontSizeReset: () => {
+        void getSettings()
+          .then((s) => applyFontSize(clampFontSize(s.default_font_size)))
+          .catch((err) => console.error(err));
+      },
+    });
+    root.insertBefore(editor.el, chip ?? handle);
+    editor.setFontSize(fontSize);
+    editor.setHtml(note.html);
+    const el = editor.el;
+    attachFormatToolbar(() => [el]);
+  }
+
   function applyFontSize(next: number): void {
-    if (next === fontSize) return;
+    if (!editor || next === fontSize) return;
     fontSize = next;
     editor.setFontSize(next);
     showChip(next);
     saveFont.push(next);
   }
-  root.insertBefore(editor.el, chip);
-  editor.setFontSize(fontSize);
-  editor.setHtml(note.html);
-  attachFormatToolbar(() => [editor.el]);
 
   let chipTimer: ReturnType<typeof setTimeout> | null = null;
   function showChip(px: number): void {
+    if (!chip) return;
     chip.textContent = `글자 ${px}px`;
     chip.classList.add('show');
     if (chipTimer !== null) clearTimeout(chipTimer);
@@ -264,6 +315,69 @@ async function start(root: HTMLElement, id: string): Promise<void> {
     void win.startResizeDragging('SouthEast').catch(fail);
   });
 
+  // ── 이미지 메모: 비율 고정 ────────────────────────────────────────────────
+  // 창을 어떻게 늘리든 그림 비율을 지킨다. Ctrl+휠은 10%씩, 손잡이로 끈 뒤에는 가로를 기준으로
+  // 세로를 다시 맞춘다. 저장은 Rust가 Moved/Resized로 알아서 하므로 여기서는 크기만 정한다.
+  if (isImage) {
+    const src = note.image ?? { w: 1, h: 1 };
+    /** 내가 setSize를 부른 시각. 그 직후에 오는 Resized는 내 것이라 다시 맞추지 않는다. */
+    let selfSizedAt = 0;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const maxW = (): number => {
+      const avail = window.screen?.availWidth ?? 0;
+      return avail > MIN_IMAGE_W ? avail : FALLBACK_MAX_W;
+    };
+
+    /** 지금 창의 논리 가로. innerSize는 물리 픽셀이라 scaleFactor로 나눈다. */
+    const logicalWidth = async (): Promise<number> => {
+      const [size, scale] = await Promise.all([win.innerSize(), win.scaleFactor()]);
+      return scale > 0 ? size.width / scale : size.width;
+    };
+
+    const applyWidth = async (w: number): Promise<void> => {
+      const next = fitSize(src.w, src.h, w, maxW());
+      selfSizedAt = Date.now();
+      await win.setSize(new LogicalSize(next.w, next.h));
+      selfSizedAt = Date.now();
+    };
+
+    root.addEventListener(
+      'wheel',
+      (e) => {
+        if (!e.ctrlKey && !e.metaKey) return;
+        e.preventDefault();
+        void (async () => {
+          const now = await logicalWidth();
+          await applyWidth(e.deltaY < 0 ? now * ZOOM_STEP : now / ZOOM_STEP);
+        })().catch(fail);
+      },
+      { passive: false },
+    );
+
+    // 편집기가 없으니 Ctrl+0은 문서에서 직접 받는다.
+    document.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key !== '0') return;
+      e.preventDefault();
+      void applyWidth(IMAGE_RESET_W).catch(fail);
+    });
+
+    try {
+      await win.onResized(() => {
+        if (Date.now() - selfSizedAt < SELF_SIZE_MS) return;
+        if (resizeTimer !== null) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          resizeTimer = null;
+          void logicalWidth()
+            .then((w) => applyWidth(w))
+            .catch(fail);
+        }, RESIZE_MS);
+      });
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   // ── 우클릭 메뉴 ───────────────────────────────────────────────────────────
   root.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -313,12 +427,12 @@ async function start(root: HTMLElement, id: string): Promise<void> {
   let pendingHtml: string | null = null;
 
   function applyPendingHtml(): void {
-    if (pendingHtml === null) return;
+    if (pendingHtml === null || !editor) return;
     if (editor.setHtml(pendingHtml)) pendingHtml = null;
   }
 
   // blur 시점에는 activeElement가 아직 편집기일 수 있어 한 박자 뒤에 시도한다.
-  editor.el.addEventListener('blur', () => {
+  editor?.el.addEventListener('blur', () => {
     setTimeout(applyPendingHtml, 0);
   });
 
@@ -342,6 +456,7 @@ async function start(root: HTMLElement, id: string): Promise<void> {
     note = own ? { ...fresh, html: note.html } : { ...fresh };
 
     paint();
+    if (!editor) return;
     const px = clampFontSize(fresh.font_size);
     if (px !== fontSize) {
       fontSize = px;
@@ -358,5 +473,5 @@ async function start(root: HTMLElement, id: string): Promise<void> {
     fail(e);
   }
 
-  if (!note.text.trim()) editor.focus();
+  if (editor && !note.text.trim()) editor.focus();
 }

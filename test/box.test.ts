@@ -21,9 +21,15 @@ const api = vi.hoisted(() => ({
   closeNoteWindow: vi.fn(),
   onStoreChanged: vi.fn(),
   onSettingsChanged: vi.fn(),
+  createImageNote: vi.fn(),
+  readImageFile: vi.fn(),
+  imageUrl: vi.fn((id: string) => `memopin://image/${id}`),
 }));
 vi.mock('../src/api.ts', () => api);
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'box' }) }));
+/** 파일 고르기 대화상자는 Rust 쪽이라 jsdom에서 부를 수 없다. */
+const dialog = vi.hoisted(() => ({ open: vi.fn() }));
+vi.mock('@tauri-apps/plugin-dialog', () => dialog);
 
 const {
   clickSelection,
@@ -31,6 +37,9 @@ const {
   matchesQuery,
   matchesView,
   mountBox,
+  noteTitle,
+  notePreview,
+  pastedImageName,
   pruneSelection,
   sortNotes,
   visibleNotes,
@@ -53,6 +62,8 @@ function note(over: Partial<Note> = {}): Note {
     created_at: '2026-09-01T00:00:00Z',
     updated_at: '2026-09-01T00:00:00Z',
     deleted_at: null,
+    kind: 'text',
+    image: null,
     ...over,
   };
 }
@@ -68,6 +79,7 @@ const SETTINGS: Settings = {
   recent_colors: [],
   favorite_colors: [],
   data_dir: null,
+  guide_seeded: false,
 };
 
 const CATS: Category[] = [
@@ -119,6 +131,45 @@ describe('검색', () => {
   });
   it('html이 아니라 text를 본다', () => {
     expect(matchesQuery(note({ html: '<p>숨은글</p>', text: '보이는글' }), '숨은글')).toBe(false);
+  });
+  it('이미지 메모는 파일 이름도 본다', () => {
+    const img = note({
+      text: '',
+      kind: 'image',
+      image: { file: 'images/n1.png', name: '표지 시안.PNG', w: 800, h: 600 },
+    });
+    expect(matchesQuery(img, '표지')).toBe(true);
+    expect(matchesQuery(img, 'png')).toBe(true);
+    expect(matchesQuery(img, '없는말')).toBe(false);
+  });
+});
+
+describe('이미지 메모의 제목과 미리보기', () => {
+  const img = (over: Partial<Note> = {}): Note =>
+    note({
+      id: 'i1',
+      kind: 'image',
+      html: '',
+      text: '',
+      image: { file: 'images/i1.png', name: '표지.png', w: 800, h: 600 },
+      ...over,
+    });
+
+  it('제목은 image.name이다', () => {
+    expect(noteTitle(img())).toBe('표지.png');
+    expect(noteTitle(img({ image: null }))).toBe('이미지 메모');
+    expect(noteTitle(note({ text: '첫 줄\n둘째 줄' }))).toBe('첫 줄');
+  });
+
+  it('미리보기는 곁들인 텍스트의 첫 줄, 없으면 픽셀 크기', () => {
+    expect(notePreview(img())).toBe('800×600');
+    expect(notePreview(img({ text: '\n표지 후보 1번\n메모' }))).toBe('표지 후보 1번');
+    // 텍스트 메모는 지금까지대로 첫 줄을 뺀 나머지다.
+    expect(notePreview(note({ text: '첫 줄\n둘째 줄' }))).toBe('둘째 줄');
+  });
+
+  it('붙여넣은 그림 이름은 분 단위 시각이 붙는다', () => {
+    expect(pastedImageName(new Date(2026, 8, 5, 14, 3))).toBe('붙여넣은 이미지 2026-09-05 14-03.png');
   });
 });
 
@@ -538,6 +589,125 @@ describe('mountBox', () => {
     expect(api.createNote).toHaveBeenCalledWith({ category_id: 'c1' });
     expect(api.openNoteWindow).toHaveBeenCalledWith('n9');
     expect(root.querySelector('.list .item.sel')?.getAttribute('data-id')).toBe('n9');
+  });
+
+  it('이미지 메모는 썸네일과 파일 이름으로 그린다', async () => {
+    notes.push(
+      note({
+        id: 'i1',
+        kind: 'image',
+        html: '',
+        text: '',
+        image: { file: 'images/i1.png', name: '표지.png', w: 800, h: 600 },
+        updated_at: '2026-09-05T00:00:00Z',
+      }),
+    );
+    mountBox(root);
+    await flush();
+
+    const item = root.querySelector<HTMLElement>('.list .item[data-id=i1]')!;
+    expect(item.classList.contains('image')).toBe(true);
+    const thumb = item.querySelector<HTMLImageElement>('.thumb img')!;
+    expect(thumb.getAttribute('src')).toBe('memopin://image/i1');
+    expect(item.querySelector('.t span')?.textContent).toBe('표지.png');
+    expect(item.querySelector('.p')?.textContent).toBe('800×600');
+    // 텍스트 메모에는 썸네일이 없다.
+    expect(root.querySelector('.list .item[data-id=n1] .thumb')).toBeNull();
+  });
+
+  it('이미지 메모를 고르면 그림과 곁들인 텍스트 칸이 함께 열린다', async () => {
+    notes.push(
+      note({
+        id: 'i1',
+        kind: 'image',
+        html: '<p>표지 후보</p>',
+        text: '표지 후보',
+        image: { file: 'images/i1.png', name: '표지.png', w: 800, h: 600 },
+        updated_at: '2026-09-05T00:00:00Z',
+      }),
+    );
+    mountBox(root);
+    await flush();
+    click(root, 'i1');
+
+    expect(root.querySelector('.ed-image')?.hasAttribute('hidden')).toBe(false);
+    expect(root.querySelector<HTMLImageElement>('.ed-image img')!.getAttribute('src')).toBe('memopin://image/i1');
+    expect(root.querySelector('.ed-head .title')?.textContent).toBe('표지.png');
+    const editor = root.querySelector<HTMLElement>('.editor')!;
+    expect(editor.hidden).toBe(false);
+    expect(editor.innerHTML).toBe('<p>표지 후보</p>');
+    expect(editor.dataset['ph']).toBe('이 이미지에 붙일 메모');
+
+    // 텍스트 메모로 돌아가면 그림 칸은 닫히고 안내 글도 돌아온다.
+    click(root, 'n1');
+    expect(root.querySelector('.ed-image')?.hasAttribute('hidden')).toBe(true);
+    expect(root.querySelector<HTMLElement>('.editor')!.dataset['ph']).toBe('메모를 적으세요. 첫 줄이 제목이 됩니다.');
+  });
+
+  it('이미지 메모의 복제는 막고 까닭을 알린다', async () => {
+    notes.push(
+      note({
+        id: 'i1',
+        kind: 'image',
+        html: '',
+        text: '',
+        image: { file: 'images/i1.png', name: '표지.png', w: 800, h: 600 },
+        updated_at: '2026-09-05T00:00:00Z',
+      }),
+    );
+    mountBox(root);
+    await flush();
+
+    root
+      .querySelector<HTMLElement>('.list .item[data-id=i1]')!
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    document
+      .querySelector<HTMLElement>('.cmenu [data-action="duplicate"]')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flush();
+
+    expect(api.createNote).not.toHaveBeenCalled();
+    expect(root.querySelector('.err')?.textContent).toBe('이미지 메모는 아직 복제할 수 없습니다');
+  });
+
+  it('🖼는 파일을 골라 크롭 화면을 띄우고, 취소하면 편집 칸으로 돌아온다', async () => {
+    mountBox(root);
+    await flush();
+    dialog.open.mockResolvedValue('D:\\pic\\표지.png');
+    api.readImageFile.mockResolvedValue({
+      data_url: 'data:image/png;base64,AAAA',
+      name: '표지.png',
+    });
+
+    root.querySelector<HTMLButtonElement>('.btn.pic')!.click();
+    await flush();
+
+    expect(dialog.open).toHaveBeenCalledWith({
+      multiple: false,
+      filters: [{ name: '이미지', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'] }],
+    });
+    expect(api.readImageFile).toHaveBeenCalledWith('D:\\pic\\표지.png');
+    const cropper = root.querySelector<HTMLElement>('.cropper')!;
+    expect(cropper).toBeTruthy();
+    expect(cropper.querySelector<HTMLImageElement>('.crop-img')!.getAttribute('src')).toBe(
+      'data:image/png;base64,AAAA',
+    );
+    expect(cropper.querySelector('.crop-name')?.textContent).toBe('표지.png');
+    expect(root.querySelector<HTMLElement>('.editor')!.hidden).toBe(true);
+
+    cropper.querySelector<HTMLButtonElement>('.crop-cancel')!.click();
+    expect(root.querySelector('.cropper')).toBeNull();
+    expect(root.querySelector('.ed-empty')?.hasAttribute('hidden')).toBe(false);
+  });
+
+  it('파일 고르기를 취소하면 아무 일도 없다', async () => {
+    mountBox(root);
+    await flush();
+    dialog.open.mockResolvedValue(null);
+    root.querySelector<HTMLButtonElement>('.btn.pic')!.click();
+    await flush();
+    expect(api.readImageFile).not.toHaveBeenCalled();
+    expect(root.querySelector('.cropper')).toBeNull();
   });
 
   it('우클릭 복제는 같은 내용의 메모를 만들고 그것을 고른다(창은 열지 않는다)', async () => {

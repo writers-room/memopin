@@ -2,6 +2,8 @@
 //! 프런트와의 약속은 `docs/contract.md`가 원본이다.
 
 pub mod commands;
+pub mod guide;
+pub mod protocol;
 pub mod settings;
 pub mod shortcut;
 pub mod store;
@@ -176,7 +178,9 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--hidden"]),
-        ));
+        ))
+        // 이미지 메모의 그림. 데이터 폴더가 언제든 바뀌므로 요청마다 지금 폴더에서 읽는다.
+        .register_uri_scheme_protocol(protocol::SCHEME, protocol::handle);
 
     builder
         .invoke_handler(tauri::generate_handler![
@@ -188,6 +192,8 @@ pub fn run() {
             commands::restore_note,
             commands::purge_note,
             commands::empty_trash,
+            commands::create_image_note,
+            commands::read_image_file,
             commands::list_categories,
             commands::create_category,
             commands::rename_category,
@@ -205,9 +211,33 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
 
-            let loaded = settings::load(&handle);
+            let mut loaded = settings::load(&handle);
             let data_dir = settings::resolve_data_dir(&handle, &loaded)?;
-            let store = Store::load(&data_dir)?;
+            let mut store = Store::load(&data_dir)?;
+
+            // 첫 실행 안내 메모. 처음 켠 사람에게만 두 장을 만들어 두고, 이미 메모가
+            // 있는 사람에게는 만들지 않되 다시 묻지 않도록 표시만 해 둔다.
+            // 아래 restore_open_notes가 이 메모들의 창을 자연히 띄운다.
+            if !loaded.guide_seeded {
+                let seeded = if guide::needs_seed(loaded.guide_seeded, &store.list_notes()) {
+                    match guide::seed(&mut store, loaded.default_font_size) {
+                        Ok(_) => true,
+                        Err(e) => {
+                            eprintln!("안내 메모를 만들지 못했습니다: {e}");
+                            false
+                        }
+                    }
+                } else {
+                    true
+                };
+                if seeded {
+                    loaded.guide_seeded = true;
+                    if let Err(e) = settings::save(&handle, &loaded) {
+                        eprintln!("{e}");
+                    }
+                }
+            }
+
             let autostart_wanted = loaded.autostart;
             let settings_for_shortcut = loaded.clone();
 

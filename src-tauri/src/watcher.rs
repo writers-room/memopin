@@ -21,7 +21,18 @@ pub struct DataWatcher {
     _watcher: RecommendedWatcher,
 }
 
-fn is_interesting(path: &Path) -> bool {
+/// 메모 JSON과 카테고리만 본다. `images/` 아래는 통째로 무시한다 — 메모 JSON이 곧
+/// 진실이고 그림 파일은 그 뒤에 따라올 뿐이라, 그림이 늦게 도착했다고 다시 읽을 것이 없다.
+fn is_interesting(root: &Path, path: &Path) -> bool {
+    if let Ok(rel) = path.strip_prefix(root) {
+        if rel
+            .components()
+            .next()
+            .is_some_and(|c| c.as_os_str() == crate::store::IMAGES_DIR)
+        {
+            return false;
+        }
+    }
     path.extension().and_then(|e| e.to_str()) == Some("json")
 }
 
@@ -39,6 +50,7 @@ pub fn start(app: &AppHandle, dir: &Path) -> Result<DataWatcher, String> {
         .map_err(|e| format!("데이터 폴더를 감시하지 못했습니다: {e}"))?;
 
     let app = app.clone();
+    let root = dir.to_path_buf();
     std::thread::spawn(move || {
         let mut pending: HashSet<PathBuf> = HashSet::new();
         let mut deadline: Option<Instant> = None;
@@ -51,7 +63,7 @@ pub fn start(app: &AppHandle, dir: &Path) -> Result<DataWatcher, String> {
             match rx.recv_timeout(timeout) {
                 Ok(Ok(event)) => {
                     for path in event.paths {
-                        if is_interesting(&path) {
+                        if is_interesting(&root, &path) {
                             pending.insert(path);
                         }
                     }
@@ -100,4 +112,21 @@ fn flush(app: &AppHandle, paths: &[PathBuf]) {
         (true, true) => "categories",
     };
     emit_store_changed(app, kind, ids, "fs");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn watches_notes_but_not_images() {
+        let root = Path::new("/data");
+        assert!(is_interesting(root, &root.join("notes").join("a.json")));
+        assert!(is_interesting(root, &root.join("categories.json")));
+        assert!(!is_interesting(root, &root.join("images").join("a.png")));
+        assert!(!is_interesting(root, &root.join("images").join("a.json")));
+        // 데이터 폴더 이름 자체에 images가 들어 있어도 상관없다(첫 조각만 본다).
+        let odd = Path::new("/images/memo");
+        assert!(is_interesting(odd, &odd.join("notes").join("a.json")));
+    }
 }

@@ -65,6 +65,9 @@ pub struct Settings {
     pub favorite_colors: Vec<String>,
     #[serde(default)]
     pub data_dir: Option<String>,
+    /// 첫 실행 안내 메모를 만들었는지. 한 번 true가 되면 지워도 다시 만들지 않는다.
+    #[serde(default)]
+    pub guide_seeded: bool,
 }
 
 impl Default for Settings {
@@ -80,6 +83,7 @@ impl Default for Settings {
             recent_colors: Vec::new(),
             favorite_colors: Vec::new(),
             data_dir: None,
+            guide_seeded: false,
         }
     }
 }
@@ -108,6 +112,8 @@ pub struct SettingsPatch {
     pub favorite_colors: Option<Vec<String>>,
     #[serde(default, deserialize_with = "double_option")]
     pub data_dir: Option<Option<String>>,
+    #[serde(default)]
+    pub guide_seeded: Option<bool>,
 }
 
 fn double_option<'de, T, D>(de: D) -> Result<Option<Option<T>>, D::Error>
@@ -211,6 +217,9 @@ mod tests {
         let s: Settings = serde_json::from_str(old).unwrap();
         assert!(s.recent_colors.is_empty());
         assert!(s.favorite_colors.is_empty());
+        // guide_seeded가 없던 시절의 파일은 false로 읽히지만, 그 사람은 이미 메모가
+        // 있으므로 시작 절차가 안내 메모를 만들지 않고 표시만 해 둔다(lib.rs).
+        assert!(!s.guide_seeded);
 
         let p: SettingsPatch = serde_json::from_str(r##"{"recent_colors": ["#123456"]}"##).unwrap();
         assert_eq!(p.recent_colors.as_deref(), Some(&["#123456".to_string()][..]));

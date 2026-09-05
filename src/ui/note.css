@@ -52,6 +52,24 @@ body { background: var(--n-bg); color: var(--n-ink); }
 /* tokens.css가 body에 user-select:none을 걸어 두므로 본문만 되돌린다. */
 .note .editor { flex: 1; overflow: auto; padding: 0 14px 14px; user-select: text; }
 
+/*
+ * 이미지 메모. 그림이 창을 꽉 채우고 띠는 그 위에 겹친다. 띠가 자리를 차지하면 그림이
+ * 22px 내려앉아 위아래 여백이 어긋난다. 그림 위에서는 메모 잉크색이 보이지 않으므로
+ * 쉼에서 투명, 호버에서 어두운 띠 + 흰 아이콘으로 간다.
+ */
+.note.image .note-bar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 2; background: transparent;
+}
+.note.image:hover .note-bar { background: rgba(0, 0, 0, .28); }
+.note.image .nb { color: #fff; }
+.note.image .nb:hover { background: rgba(255, 255, 255, .22); }
+.note.image .note-resize { color: #fff; mix-blend-mode: difference; }
+
+.note-img {
+  width: 100%; height: 100%; object-fit: contain; display: block;
+  background: var(--n-bg); user-select: none; -webkit-user-drag: none;
+}
+
 /* 시안의 .note::after 자리. 실제 요소여야 pointerdown으로 창 크기 조절을 시작할 수 있다. */
 .note-resize { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; }
 .note-resize::after {

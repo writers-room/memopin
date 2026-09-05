@@ -13,7 +13,7 @@ use tauri::{
     WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
-use crate::store::{Note, WindowRect};
+use crate::store::{Note, NoteKind, WindowRect};
 use crate::{emit_store_changed, AppState};
 
 // ── Windows 전용: 창 이동/리사이즈 시 한글(IME) "문자열 마무리" 팝업 회피 ──
@@ -165,6 +165,20 @@ fn apply_rect(app: &AppHandle, window: &WebviewWindow, rect: WindowRect) {
 
 // ── 창 만들기 ───────────────────────────────────────────────────────────────
 
+/// 이미지 메모 창의 첫 크기(논리 픽셀). 가로를 320으로 두고 그림 비율대로 세로를 정한다.
+/// 아주 납작한 그림이라도 손잡이와 가장자리를 잡을 수 있어야 해서 세로는 80 아래로
+/// 내려가지 않는다. 이후 크기는 프런트가 비율을 지키며 바꾸고 Rust가 저장한다.
+const IMAGE_WINDOW_WIDTH: f64 = 320.0;
+const IMAGE_WINDOW_MIN_HEIGHT: f64 = 80.0;
+
+pub fn image_window_size(w: u32, h: u32) -> (f64, f64) {
+    if w == 0 || h == 0 {
+        return (IMAGE_WINDOW_WIDTH, IMAGE_WINDOW_WIDTH);
+    }
+    let height = (IMAGE_WINDOW_WIDTH * h as f64 / w as f64).round();
+    (IMAGE_WINDOW_WIDTH, height.max(IMAGE_WINDOW_MIN_HEIGHT))
+}
+
 /// 메모 창을 실제로 만든다. **메인 스레드에서만** 부를 것.
 pub fn build_note_window(app: &AppHandle, note: &Note) -> Result<WebviewWindow, String> {
     // 빌더에 `.drag_and_drop(false)`를 체이닝하는 방식은 Tauri 쪽 버그
@@ -186,6 +200,18 @@ pub fn build_note_window(app: &AppHandle, note: &Note) -> Result<WebviewWindow, 
         drag_drop_enabled: false,
         ..Default::default()
     };
+    // 이미지 메모는 그림 비율이 창 비율이다. 최소 높이도 함께 낮춰야 납작한 그림이
+    // 140에 걸려 늘어나지 않는다.
+    let image = match (note.kind, note.image.as_ref()) {
+        (NoteKind::Image, Some(image)) => Some(image),
+        _ => None,
+    };
+    if let Some(image) = image {
+        config.min_height = Some(IMAGE_WINDOW_MIN_HEIGHT);
+        let (w, h) = image_window_size(image.w, image.h);
+        config.width = w;
+        config.height = h;
+    }
     // 크기는 만든 뒤에도 다시 맞추지만, 첫 프레임이 320×320으로 떴다가 줄어드는
     // 깜빡임을 줄이려고 설정에도 넣어 둔다.
     if let Some(rect) = note.window {
@@ -354,9 +380,26 @@ fn mark_closed(app: &AppHandle, id: &str) {
         let Ok(mut store) = state.store.lock() else {
             return;
         };
-        match store.set_open(id, false) {
-            Ok(changed) => changed,
-            Err(_) => false,
+        // 아무것도 안 적은 텍스트 메모를 그냥 닫으면 메모함(휴지통 포함)에 남기지 않는다.
+        // 새 메모를 열었다가 마음이 바뀌어 닫는 흔한 경우다. 프런트는 ✕를 누를 때 미저장분을
+        // 먼저 flush하므로 여기서 보는 text는 최신이다.
+        let empty = store
+            .get_note(id)
+            .map(|n| n.kind == NoteKind::Text && n.text.trim().is_empty())
+            .unwrap_or(false);
+        if empty {
+            match store.purge_note(id) {
+                Ok(()) => true,
+                Err(e) => {
+                    eprintln!("빈 메모를 지우지 못했습니다 ({id}): {e}");
+                    false
+                }
+            }
+        } else {
+            match store.set_open(id, false) {
+                Ok(changed) => changed,
+                Err(_) => false,
+            }
         }
     };
     if changed {
@@ -481,5 +524,22 @@ pub fn restore_open_notes(app: &AppHandle) {
 pub fn apply_always_on_top(app: &AppHandle, id: &str, value: bool) {
     if let Some(window) = app.get_webview_window(&note_label(id)) {
         let _ = window.set_always_on_top(value);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn image_window_keeps_the_picture_ratio() {
+        assert_eq!(image_window_size(640, 480), (320.0, 240.0));
+        assert_eq!(image_window_size(300, 300), (320.0, 320.0));
+        // 세로로 긴 그림도 가로 320 기준이다.
+        assert_eq!(image_window_size(900, 1600), (320.0, 569.0));
+        // 아주 납작하면 최소 높이에서 멈춘다.
+        assert_eq!(image_window_size(1000, 100), (320.0, 80.0));
+        // 크기를 모르면 정사각형(텍스트 메모와 같은 320×320).
+        assert_eq!(image_window_size(0, 0), (320.0, 320.0));
     }
 }

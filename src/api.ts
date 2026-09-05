@@ -11,6 +11,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import type {
   Category,
+  CreateImageNoteInput,
   CreateNoteInput,
   Note,
   NotePatch,
@@ -55,6 +56,27 @@ export function purgeNote(id: string): Promise<void> {
 
 export function emptyTrash(): Promise<void> {
   return invoke('empty_trash');
+}
+
+// ── 이미지 메모 ─────────────────────────────────────────────────────────────
+
+/** 자른 PNG를 images/<id>.png에 쓰고 kind:'image' 메모를 만든다. 창은 열지 않는다. */
+export function createImageNote(input: CreateImageNoteInput): Promise<Note> {
+  return invoke('create_image_note', { input });
+}
+
+/** 파일 선택 대화상자로 고른 원본을 data URL로 읽는다(크롭 화면용). 20MB 초과·지원 밖 형식이면 reject. */
+export function readImageFile(path: string): Promise<{ data_url: string; name: string }> {
+  return invoke('read_image_file', { path });
+}
+
+/**
+ * 이미지 메모의 그림 주소. Rust가 `memopin` 커스텀 프로토콜로 현재 데이터 폴더의 images/<id>.png를 준다.
+ * Windows의 WebView2는 커스텀 스킴을 http://<scheme>.localhost/ 로 바꿔 부른다(Tauri 규칙).
+ */
+export function imageUrl(id: string): string {
+  const win = navigator.userAgent.includes('Windows');
+  return win ? `http://memopin.localhost/image/${encodeURIComponent(id)}` : `memopin://image/${encodeURIComponent(id)}`;
 }
 
 // ── 카테고리 ────────────────────────────────────────────────────────────────

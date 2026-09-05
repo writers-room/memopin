@@ -31,6 +31,7 @@ const SETTINGS: Settings = {
   recent_colors: [],
   favorite_colors: [],
   data_dir: 'D:\\Drive\\memopin',
+  guide_seeded: false,
 };
 
 const key = (over: Partial<KeyboardEventInit> & { key: string }) => ({

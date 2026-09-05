@@ -9,10 +9,24 @@ import type { Category, Note, StoreChanged } from '../src/types.ts';
 const tauri = vi.hoisted(() => ({
   label: 'note-n1',
   startResizeDragging: vi.fn(async () => {}),
+  // 이미지 메모가 비율을 지키며 크기를 바꿀 때만 쓴다.
+  innerSize: vi.fn(async () => ({ width: 320, height: 320 })),
+  scaleFactor: vi.fn(async () => 1),
+  setSize: vi.fn(async (_size: { width: number; height: number }) => {}),
+  onResized: vi.fn(async (_cb: () => void) => () => {}),
 }));
 
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => tauri,
+  // erasableSyntaxOnly라 파라미터 프로퍼티는 쓸 수 없다.
+  LogicalSize: class {
+    width: number;
+    height: number;
+    constructor(width: number, height: number) {
+      this.width = width;
+      this.height = height;
+    }
+  },
 }));
 
 vi.mock('../src/api.ts', () => ({
@@ -25,6 +39,7 @@ vi.mock('../src/api.ts', () => ({
   showBox: vi.fn(),
   listCategories: vi.fn(),
   onStoreChanged: vi.fn(),
+  imageUrl: vi.fn((id: string) => `memopin://image/${id}`),
   // 우클릭 메뉴가 최근·즐겨찾는 색을 설정에서 읽는다.
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
@@ -32,7 +47,7 @@ vi.mock('../src/api.ts', () => ({
 }));
 
 import * as api from '../src/api.ts';
-import { affectsNote, clampFontSize, isOwnChange, mountNote } from '../src/ui/note.ts';
+import { affectsNote, clampFontSize, fitSize, isOwnChange, mountNote } from '../src/ui/note.ts';
 
 const ID = 'n1';
 
@@ -52,6 +67,8 @@ function makeNote(over: Partial<Note> = {}): Note {
     created_at: '2026-09-05T00:00:00Z',
     updated_at: '2026-09-05T00:00:00Z',
     deleted_at: null,
+    kind: 'text',
+    image: null,
     ...over,
   };
 }
@@ -108,6 +125,27 @@ describe('clampFontSize', () => {
     expect(clampFontSize(99)).toBe(28);
     expect(clampFontSize(15.6)).toBe(16);
     expect(clampFontSize(Number.NaN)).toBe(11);
+  });
+});
+
+describe('fitSize', () => {
+  it('가로를 맞추고 세로는 원본 비율로 따라온다', () => {
+    expect(fitSize(800, 600, 400)).toEqual({ w: 400, h: 300 });
+    expect(fitSize(600, 800, 300)).toEqual({ w: 300, h: 400 });
+  });
+  it('가로 120 아래로는 줄지 않는다', () => {
+    expect(fitSize(800, 600, 40)).toEqual({ w: 120, h: 90 });
+  });
+  it('최대 가로를 넘지 않는다', () => {
+    expect(fitSize(800, 600, 5000, 1000)).toEqual({ w: 1000, h: 750 });
+  });
+  it('세로는 최소 1이고 정수다', () => {
+    expect(fitSize(1000, 3, 121)).toEqual({ w: 121, h: 1 });
+    expect(fitSize(3, 7, 121.4)).toEqual({ w: 121, h: 282 });
+  });
+  it('망가진 값은 1:1로 본다', () => {
+    expect(fitSize(0, 0, 200)).toEqual({ w: 200, h: 200 });
+    expect(fitSize(800, 600, Number.NaN)).toEqual({ w: 120, h: 90 });
   });
 });
 
@@ -365,6 +403,69 @@ describe('mountNote', () => {
     await mount();
     expect(focus).toHaveBeenCalled();
     focus.mockRestore();
+  });
+});
+
+describe('이미지 메모 창', () => {
+  const imageNote = (over: Partial<Note> = {}): Note =>
+    makeNote({
+      kind: 'image',
+      html: '',
+      text: '',
+      image: { file: 'images/n1.png', name: '표지.png', w: 800, h: 600 },
+      ...over,
+    });
+
+  it('편집기 대신 그림을 그린다', async () => {
+    vi.mocked(api.getNote).mockResolvedValue(imageNote());
+    await mount();
+
+    expect(root.className).toBe('note image');
+    const img = root.querySelector<HTMLImageElement>('img.note-img')!;
+    expect(img).not.toBeNull();
+    expect(img.getAttribute('src')).toBe('memopin://image/n1');
+    expect(img.draggable).toBe(false);
+    expect(img.alt).toBe('표지.png');
+    // 편집기·글자 크기 칩은 붙지 않는다.
+    expect(root.querySelector('.editor')).toBeNull();
+    expect(root.querySelector('.fschip')).toBeNull();
+    // 띠와 손잡이는 그대로다.
+    expect(root.querySelectorAll('.note-bar .nb').length).toBe(4);
+    expect(root.querySelector('.note-resize')).not.toBeNull();
+  });
+
+  it('Ctrl+휠은 비율을 지키며 10%씩 키운다', async () => {
+    vi.mocked(api.getNote).mockResolvedValue(imageNote());
+    await mount();
+    tauri.setSize.mockClear();
+
+    root.dispatchEvent(new WheelEvent('wheel', { ctrlKey: true, deltaY: -1, bubbles: true, cancelable: true }));
+    await flush();
+    // 320 × 1.1 = 352, 세로는 800:600 비율로 264
+    expect(tauri.setSize).toHaveBeenCalledTimes(1);
+    expect(tauri.setSize.mock.calls[0]![0]).toMatchObject({ width: 352, height: 264 });
+  });
+
+  it('Ctrl+0은 가로 320으로 되돌린다', async () => {
+    vi.mocked(api.getNote).mockResolvedValue(imageNote());
+    await mount();
+    tauri.setSize.mockClear();
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '0', ctrlKey: true, bubbles: true, cancelable: true }));
+    await flush();
+    expect(tauri.setSize.mock.calls[0]![0]).toMatchObject({ width: 320, height: 240 });
+  });
+
+  it('바깥에서 색이 바뀌면 배경만 따라오고 그림은 그대로다', async () => {
+    vi.mocked(api.getNote).mockResolvedValue(imageNote());
+    await mount();
+    const img = root.querySelector<HTMLImageElement>('img.note-img')!;
+
+    vi.mocked(api.getNote).mockResolvedValue(imageNote({ color: '#D2E7FF' }));
+    changed!({ kind: 'notes', ids: [ID], source: 'fs' });
+    await flush();
+    expect(document.documentElement.style.getPropertyValue('--n-bg')).toBe('#d2e7ff');
+    expect(img.getAttribute('src')).toBe('memopin://image/n1');
   });
 });
 

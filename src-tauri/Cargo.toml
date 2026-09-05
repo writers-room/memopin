@@ -23,6 +23,9 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
+# 이미지 메모: 프런트가 canvas로 자른 PNG를 base64로 보내고, 파일 선택으로 읽은
+# 원본은 data URL로 돌려준다(`create_image_note` / `read_image_file`).
+base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 # 데이터 폴더 감시(동기화 클라이언트가 내려받은 파일을 알아채기 위해).
 notify = "8"

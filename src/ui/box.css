@@ -45,9 +45,12 @@
 .listpane { width: 280px; flex: none; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--line); }
 .tools { display: flex; gap: 8px; align-items: stretch; padding: 12px 10px 8px; }
 /* 검색칸과 같은 높이의 정사각형. 글리프는 가운데. */
+.tools .btn { flex: none; }
 .tools .btn.new { width: 34px; height: auto; padding: 0; justify-content: center; font-size: 20px; line-height: 1; }
+.tools .btn.pic { width: 34px; height: auto; padding: 0; justify-content: center; font-size: 16px; line-height: 1; }
 .search {
-  flex: 1; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px;
+  /* min-width:0 — input의 기본 폭(20ch)이 flex 최소 폭이 되어 오른쪽 버튼을 밀어내 잘리게 했다. */
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px;
   border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--ink-3);
 }
 .search input { flex: 1; border: 0; background: transparent; color: var(--ink); outline: none; min-width: 0; }
@@ -85,6 +88,14 @@
 .item .t .glyph { flex: none; font-size: 11px; color: var(--ink-3); }
 .item .t .open { flex: none; font-size: 11px; font-weight: 600; color: var(--accent); }
 .item .p { grid-column: 1/-1; color: var(--ink-2); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 이미지 메모: 색 띠 다음에 정사각형 썸네일. 제목·시각·미리보기는 그 오른쪽 칸으로 밀린다. */
+.item.image { grid-template-columns: 44px 1fr auto; }
+.item.image .thumb {
+  grid-column: 1; grid-row: 1 / span 2; width: 44px; height: 44px; border-radius: 4px;
+  overflow: hidden; background: var(--surface-3);
+}
+.item.image .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.item.image .p { grid-column: 2/-1; }
 .item .meta {
   display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-3);
   font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -112,6 +123,14 @@
 .ed-head .ib.star.on { color: var(--star); }
 .ed-head .ib svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ed-head .ib.on svg path.fill, .ed-head .ib.star.on svg { fill: currentColor; }
+/* 이미지 메모의 그림. 아래의 곁들인 텍스트가 늘 보이도록 높이를 절반 아래로 묶는다. */
+.ed-image {
+  flex: 0 1 auto; max-height: 45%; min-height: 0; display: flex; justify-content: center;
+  padding: 12px 16px 4px; border-bottom: 1px solid var(--line);
+}
+.ed-image[hidden] { display: none; }
+.ed-image img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
+
 /* 둘 이상 골랐을 때 편집 칸 자리에 오는 요약. */
 .ed-multi { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 32px; }
 .ed-multi[hidden] { display: none; }

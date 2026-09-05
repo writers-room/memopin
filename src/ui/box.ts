@@ -14,23 +14,29 @@
  *     돌려도 메모 창 글자 크기는 그대로다.
  *  5. 선택은 배열이다. 하나면 지금까지와 똑같이 편집 칸이 열리고, 둘 이상이면 편집 칸 대신
  *     선택 요약이 나온다. 상태 전이는 순수 함수 `clickSelection`에 있다(테스트가 여기를 본다).
+ *  6. 이미지 메모는 메모함에서만 만든다(파일 고르기 🖼 또는 붙여넣기 → 크롭 화면 → create_image_note).
+ *     목록에서는 썸네일과 `image.name`으로 보이고, 편집 칸에서는 그림 아래에 곁들인 텍스트를 적는다.
  */
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { open } from '@tauri-apps/plugin-dialog';
 
 import {
   closeNoteWindow,
   createCategory,
+  createImageNote,
   createNote,
   deleteCategory,
   deleteNote,
   emptyTrash,
   getSettings,
+  imageUrl,
   listCategories,
   listNotes,
   onSettingsChanged,
   onStoreChanged,
   openNoteWindow,
   purgeNote,
+  readImageFile,
   renameCategory,
   restoreNote,
   updateNote,
@@ -38,9 +44,10 @@ import {
   showSettings,
 } from '../api.ts';
 import { attachFormatToolbar, createEditor, previewOf, titleOf } from '../editor/index.ts';
-import type { Category, Note, NotePatch } from '../types.ts';
+import type { Category, CreateImageNoteInput, Note, NotePatch } from '../types.ts';
 import { DEFAULT_COLOR, applyNoteColor, isValidHex } from './colors.ts';
 import { openContextMenu, type MenuAction } from './context-menu.ts';
+import { createCropper, type CropDone, type CropperHandle } from './cropper.ts';
 import { applyTheme } from './theme.ts';
 import { relativeTime } from './time.ts';
 import './box.css';
@@ -64,11 +71,15 @@ export function matchesView(note: Note, view: View): boolean {
   return note.category_id === view.slice('cat:'.length);
 }
 
-/** 평문 부분 일치, 대소문자 무시. 빈 검색어는 전부 통과. */
+/**
+ * 평문 부분 일치, 대소문자 무시. 빈 검색어는 전부 통과.
+ * 이미지 메모는 제목이 파일 이름이라 `image.name`도 함께 본다(계약: 검색은 image.name + text).
+ */
 export function matchesQuery(note: Note, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return note.text.toLowerCase().includes(q);
+  if (note.text.toLowerCase().includes(q)) return true;
+  return (note.image?.name ?? '').toLowerCase().includes(q);
 }
 
 /** 상단 고정이 먼저, 그다음 최근에 고친 것부터. */
@@ -144,6 +155,36 @@ const SEARCH_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>';
 const EMPTY_TEXT = '왼쪽 목록에서 메모를 고르면 여기서 바로 편집합니다.<br>더블클릭하면 바탕화면에도 펼칩니다.';
 
+/** 편집기 기본 안내 글. 이미지 메모에서는 곁들인 텍스트를 받는 문구로 바꾼다. */
+const TEXT_PLACEHOLDER = '메모를 적으세요. 첫 줄이 제목이 됩니다.';
+const IMAGE_PLACEHOLDER = '이 이미지에 붙일 메모';
+/** 파일 고르기 대화상자가 받는 확장자. 계약의 read_image_file과 같아야 한다. */
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'];
+
+/** 목록·편집 칸 제목. 이미지 메모는 파일 이름이 제목이다(계약). */
+export function noteTitle(note: Note): string {
+  if (note.kind === 'image') return note.image?.name || '이미지 메모';
+  return titleOf(note.text) || '(빈 메모)';
+}
+
+/** 목록의 한 줄 미리보기. 이미지 메모는 곁들인 텍스트의 첫 줄, 없으면 픽셀 크기. */
+export function notePreview(note: Note): string {
+  if (note.kind !== 'image') return previewOf(note.text);
+  const first = note.text
+    .split('\n')
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (first) return first;
+  return note.image ? `${note.image.w}×${note.image.h}` : '';
+}
+
+/** 붙여넣은 그림의 이름. 계약의 예시와 같은 모양이다. */
+export function pastedImageName(now = new Date()): string {
+  const p = (n: number): string => String(n).padStart(2, '0');
+  const date = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+  return `붙여넣은 이미지 ${date} ${p(now.getHours())}-${p(now.getMinutes())}.png`;
+}
+
 /** 메모함 편집 칸 글자 크기. 계약의 `box_font_size` 기본값과 같아야 한다. */
 const DEFAULT_BOX_FONT_SIZE = 14;
 const MIN_FONT_SIZE = 11;
@@ -209,6 +250,8 @@ export function mountBox(root: HTMLElement): void {
   let catEdit: CatEdit | null = null;
   /** 포커스 때문에 미뤄 둔 외부 변경 본문. blur 때 넣는다. */
   let pendingHtml: string | null = null;
+  /** 열려 있는 크롭 화면. 있으면 편집 칸 자리를 통째로 덮는다. */
+  let cropper: CropperHandle | null = null;
 
   const saveText = debounced(400);
   const saveFont = debounced(300);
@@ -229,6 +272,7 @@ export function mountBox(root: HTMLElement): void {
     '<div class="tools">' +
     `<label class="search">${SEARCH_SVG}<input type="search" placeholder="메모 검색" aria-label="메모 검색"></label>` +
     '<button class="btn new" type="button" title="새 메모">＋</button>' +
+    '<button class="btn pic" type="button" title="이미지 메모">🖼</button>' +
     '</div>' +
     '<div class="trashbar" hidden><button class="btn ghost sm empty-trash" type="button">휴지통 비우기</button></div>' +
     '<div class="hint" hidden></div><div class="err" hidden></div>' +
@@ -240,6 +284,7 @@ export function mountBox(root: HTMLElement): void {
     `<button class="ib star" type="button" title="즐겨찾기">${STAR_SVG}</button>` +
     `<button class="ib top" type="button" title="목록 상단에 고정">${PIN_SVG}</button>` +
     '<button class="btn ghost sm open" type="button"></button></div>' +
+    '<div class="ed-image" hidden><img alt="" draggable="false"></div>' +
     '<div class="ed-multi" hidden><div class="n"></div><div class="acts">' +
     '<button class="btn act-trash" type="button">휴지통으로 보내기</button>' +
     '<button class="btn act-restore" type="button" hidden>복원</button>' +
@@ -261,10 +306,12 @@ export function mountBox(root: HTMLElement): void {
   const editpane = pick<HTMLElement>('.editpane');
   const edEmpty = pick<HTMLElement>('.ed-empty');
   const edHead = pick<HTMLElement>('.ed-head');
+  const edImage = pick<HTMLElement>('.ed-image');
   const edMulti = pick<HTMLElement>('.ed-multi');
   const fsNote = pick<HTMLElement>('.fsnote');
 
   const editor = createEditor({
+    placeholder: TEXT_PLACEHOLDER,
     onChange: (html, text) => {
       const id = soleId();
       if (id === null) return;
@@ -518,12 +565,18 @@ export function mountBox(root: HTMLElement): void {
     }
     listEl.innerHTML = rows
       .map((n) => {
-        const title = titleOf(n.text) || '(빈 메모)';
-        const preview = previewOf(n.text);
+        const title = noteTitle(n);
+        const preview = notePreview(n);
         const on = sel.ids.includes(n.id);
+        const image = n.kind === 'image';
+        // 썸네일은 색 띠 다음. 파일은 만들어진 뒤 바뀌지 않으므로 캐시 무효화가 없다(계약).
+        const thumb = image
+          ? `<div class="thumb"><img src="${esc(imageUrl(n.id))}" alt="" draggable="false"></div>`
+          : '';
         return (
-          `<div class="item ${on ? 'sel' : ''}" data-id="${esc(n.id)}" tabindex="0" role="option"` +
+          `<div class="item ${image ? 'image ' : ''}${on ? 'sel' : ''}" data-id="${esc(n.id)}" tabindex="0" role="option"` +
           ` aria-selected="${on}" style="--stripe:${stripe(n)}">` +
+          thumb +
           `<div class="t">${n.list_pinned ? '<span class="glyph" title="목록 상단에 고정">📌</span>' : ''}` +
           `<span>${esc(title)}</span>${n.is_open ? '<span class="open">펼침</span>' : ''}</div>` +
           `<div class="meta">${esc(relativeTime(n.updated_at))}` +
@@ -601,6 +654,101 @@ export function mountBox(root: HTMLElement): void {
     }
   }
 
+  // ── 이미지 메모 ──
+  pick<HTMLButtonElement>('.btn.pic').addEventListener('click', () => {
+    void pickImage();
+  });
+
+  /** 파일에서 고르기. 원본을 읽는 것은 Rust다(20MB·형식 검사도 거기서 한다 — 계약). */
+  async function pickImage(): Promise<void> {
+    try {
+      const path = await open({
+        multiple: false,
+        filters: [{ name: '이미지', extensions: IMAGE_EXTENSIONS }],
+      });
+      if (typeof path !== 'string') return;
+      const picked = await readImageFile(path);
+      showCropper(picked.data_url, picked.name);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  /**
+   * 메모함 어디서나 붙여넣기. 편집기·검색칸에 포커스가 있으면 그쪽이 임자다(글을 붙여넣는 중이다).
+   */
+  document.addEventListener('paste', (e) => {
+    if (cropper) return;
+    const active = document.activeElement;
+    if (
+      active &&
+      (active.tagName === 'INPUT' ||
+        active.tagName === 'TEXTAREA' ||
+        active.closest('[contenteditable="true"]') !== null)
+    ) {
+      return;
+    }
+    const files = e.clipboardData?.files;
+    const file = files && files.length > 0 ? files[0] : null;
+    if (!file || !file.type.startsWith('image/')) return;
+    e.preventDefault();
+    const name = pastedImageName();
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = reader.result;
+      if (typeof url === 'string') showCropper(url, name);
+    };
+    reader.onerror = () => fail('붙여넣은 이미지를 읽지 못했습니다.');
+    reader.readAsDataURL(file);
+  });
+
+  function showCropper(dataUrl: string, name: string): void {
+    destroyCropper();
+    edEmpty.hidden = true;
+    edHead.hidden = true;
+    edImage.hidden = true;
+    edMulti.hidden = true;
+    fsNote.hidden = true;
+    editor.el.hidden = true;
+    cropper = createCropper({
+      dataUrl,
+      name,
+      onCancel: () => {
+        destroyCropper();
+        renderEditor(true);
+      },
+      onDone: (result) => void makeImageNote(result),
+      onError: (message) => fail(message),
+    });
+    editpane.append(cropper.el);
+  }
+
+  function destroyCropper(): void {
+    cropper?.destroy();
+    cropper = null;
+  }
+
+  /** 자른 PNG로 이미지 메모를 만든다. 지금 보기의 카테고리·즐겨찾기를 물려받는다(새 메모와 같은 규칙). */
+  async function makeImageNote(result: CropDone): Promise<void> {
+    destroyCropper();
+    const input: CreateImageNoteInput = {
+      png_base64: result.png_base64,
+      name: result.name,
+      w: result.w,
+      h: result.h,
+      ...(view.startsWith('cat:') ? { category_id: view.slice('cat:'.length) } : {}),
+      ...(view === 'favorite' ? { favorite: true } : {}),
+    };
+    try {
+      const made = await createImageNote(input);
+      notes = [...notes, made];
+      select(made.id);
+    } catch (e) {
+      fail(e);
+      renderEditor(true);
+    }
+  }
+
   // ── 편집 칸 ──
   function sameIds(a: readonly string[], b: readonly string[]): boolean {
     return a.length === b.length && a.every((id, i) => id === b[i]);
@@ -633,14 +781,18 @@ export function mountBox(root: HTMLElement): void {
   }
 
   function renderHeadText(note: Note): void {
-    pick<HTMLElement>('.ed-head .title').textContent = titleOf(note.text) || '(빈 메모)';
+    pick<HTMLElement>('.ed-head .title').textContent = noteTitle(note);
   }
 
   function renderEditor(loadHtml: boolean): void {
+    // 크롭 화면이 편집 칸 자리를 쓰는 동안에는 아무것도 그리지 않는다.
+    if (cropper) return;
+
     // 둘 이상 골랐으면 편집 칸 대신 선택 요약이다.
     if (sel.ids.length > 1) {
       edEmpty.hidden = true;
       edHead.hidden = true;
+      edImage.hidden = true;
       fsNote.hidden = true;
       editor.el.hidden = true;
       edMulti.hidden = false;
@@ -654,6 +806,7 @@ export function mountBox(root: HTMLElement): void {
       sel = NO_SELECTION;
       edEmpty.hidden = false;
       edHead.hidden = true;
+      edImage.hidden = true;
       fsNote.hidden = true;
       editor.el.hidden = true;
       return;
@@ -662,6 +815,18 @@ export function mountBox(root: HTMLElement): void {
     edHead.hidden = false;
     fsNote.hidden = false;
     editor.el.hidden = false;
+
+    // 이미지 메모: 머리 아래에 그림, 그 아래에 곁들인 텍스트.
+    const image = note.kind === 'image';
+    edImage.hidden = !image;
+    editor.el.dataset['ph'] = image ? IMAGE_PLACEHOLDER : TEXT_PLACEHOLDER;
+    if (image) {
+      const img = edImage.querySelector<HTMLImageElement>('img')!;
+      const url = imageUrl(note.id);
+      // src를 다시 넣으면 깜빡인다. 같은 주소면 그대로 둔다.
+      if (img.getAttribute('src') !== url) img.setAttribute('src', url);
+      img.alt = note.image?.name ?? '';
+    }
 
     editpane.style.setProperty('--stripe', stripe(note));
     applyNoteColor(editpane, stripe(note));
@@ -792,6 +957,11 @@ export function mountBox(root: HTMLElement): void {
       case 'category':
         return patch(note.id, { category_id: action.category_id });
       case 'duplicate':
+        // 이미지 파일을 복사하는 커맨드가 없다. 계약이 생기기 전까지는 막아 둔다.
+        if (note.kind === 'image') {
+          fail('이미지 메모는 아직 복제할 수 없습니다');
+          return;
+        }
         // 같은 내용의 새 메모. 창은 열지 않고 목록에서 그것을 고른다.
         try {
           const copy = await createNote({

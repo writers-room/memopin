@@ -2235,6 +2235,7 @@ dependencies = [
 name = "memopin"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "notify",
  "serde",

@@ -1,10 +1,13 @@
 //! 프런트가 부르는 커맨드 전부. 이름·인자·반환은 `docs/contract.md`가 원본이다.
 //! 모든 에러 문자열은 사용자에게 그대로 보여 줄 수 있는 한국어다.
 
+use std::path::Path;
+
+use serde::Serialize;
 use tauri::{AppHandle, Manager, State, Window};
 
 use crate::settings::{self, Settings, SettingsPatch};
-use crate::store::{Category, CreateNoteInput, Note, NotePatch, Store};
+use crate::store::{Category, CreateImageNoteInput, CreateNoteInput, Note, NotePatch, Store};
 use crate::{emit_settings_changed, emit_store_changed, windows, AppState};
 
 type Res<T> = Result<T, String>;
@@ -127,6 +130,73 @@ pub async fn empty_trash(app: AppHandle, window: Window) -> Res<()> {
         emit_store_changed(&app, "notes", ids, window.label());
     }
     Ok(())
+}
+
+// ── 이미지 메모 ─────────────────────────────────────────────────────────────
+
+/// 불러올 수 있는 원본의 최대 크기. 이보다 큰 그림은 크롭 화면에서 다루기도 버겁다.
+const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
+
+#[derive(Debug, Serialize)]
+pub struct ImageFile {
+    pub data_url: String,
+    pub name: String,
+}
+
+/// 내용을 뜯어보지 않고 확장자로 정한다(크롭 화면의 <img>가 알아서 거른다).
+fn image_mime(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "bmp" => Some("image/bmp"),
+        _ => None,
+    }
+}
+
+/// 자른 PNG를 `images/<id>.png`에 쓰고 이미지 메모를 만든다. 창은 열지 않는다.
+#[tauri::command]
+pub fn create_image_note(
+    app: AppHandle,
+    window: Window,
+    state: State<'_, AppState>,
+    input: CreateImageNoteInput,
+) -> Res<Note> {
+    let (color, font_size) = {
+        let s = lock_settings(&state)?;
+        (s.default_color.clone(), s.default_font_size)
+    };
+    let note = lock_store(&state)?.create_image_note(input, &color, font_size)?;
+    emit_store_changed(&app, "notes", vec![note.id.clone()], window.label());
+    Ok(note)
+}
+
+/// 파일 선택 대화상자로 고른 원본을 data URL로 읽는다(크롭 화면용).
+/// 20MB를 읽어 base64로 부풀리는 동안 메인 스레드를 잡지 않도록 async다.
+#[tauri::command]
+pub async fn read_image_file(path: String) -> Res<ImageFile> {
+    use base64::Engine;
+
+    let path = Path::new(&path);
+    let mime = image_mime(path).ok_or_else(|| {
+        "지원하지 않는 이미지 형식입니다. png·jpg·gif·webp·bmp만 불러올 수 있습니다.".to_string()
+    })?;
+    let meta = std::fs::metadata(path).map_err(|e| format!("이미지를 열지 못했습니다: {e}"))?;
+    if meta.len() > MAX_IMAGE_BYTES {
+        return Err("이미지가 너무 큽니다. 20MB 이하만 불러올 수 있습니다.".to_string());
+    }
+    let bytes = std::fs::read(path).map_err(|e| format!("이미지를 열지 못했습니다: {e}"))?;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "이미지".to_string());
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(ImageFile {
+        data_url: format!("data:{mime};base64,{encoded}"),
+        name,
+    })
 }
 
 // ── 카테고리 ────────────────────────────────────────────────────────────────
@@ -255,6 +325,9 @@ pub fn update_settings(
         }
         if let Some(v) = patch.favorite_colors {
             s.favorite_colors = v;
+        }
+        if let Some(v) = patch.guide_seeded {
+            s.guide_seeded = v;
         }
         settings::save(&app, &s)?;
     }

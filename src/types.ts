@@ -37,6 +37,30 @@ export interface Note {
   updated_at: string;
   /** 휴지통. null이면 살아 있음 */
   deleted_at: string | null;
+  /** 텍스트 메모 / 이미지 메모. 옛 파일에는 없으니 Rust가 'text'로 채운다 */
+  kind: 'text' | 'image';
+  /** 이미지 메모의 그림. 텍스트 메모면 null */
+  image: NoteImage | null;
+}
+
+export interface NoteImage {
+  /** 데이터 폴더 기준 상대 경로. 항상 "images/<id>.png" */
+  file: string;
+  /** 원본 파일명. 메모함 목록의 제목 */
+  name: string;
+  /** 저장된(자른) 이미지의 픽셀 크기. 창 비율의 기준 */
+  w: number;
+  h: number;
+}
+
+/** `create_image_note`의 입력. png_base64는 data URL 접두사 없이. */
+export interface CreateImageNoteInput {
+  png_base64: string;
+  name: string;
+  w: number;
+  h: number;
+  category_id?: string | null;
+  favorite?: boolean;
 }
 
 export interface Category {
@@ -67,6 +91,8 @@ export interface Settings {
   favorite_colors: string[];
   /** null = 기본 폴더 */
   data_dir: string | null;
+  /** 첫 실행 안내 메모를 만들었는지. 지워도 다시 만들지 않는다 */
+  guide_seeded: boolean;
 }
 
 /** `create_note`의 입력. 빠진 값은 설정 기본값으로 채워진다. */

@@ -91,8 +91,41 @@ interface Settings {
 - 프런트는 `getCurrentWindow().label`로 자기 역할을 안다. URL 쿼리는 쓰지 않는다
 - 창 생성은 `async` 커맨드 안에서 `run_on_main_thread` + 채널로 한다(동기 커맨드에서 하면 데드락). `WebviewWindowBuilder::from_config`로 만들고, 위치·크기는 만든 뒤 논리 픽셀로 적용
 - Windows에서는 만든 모든 창에 WM_ENTERSIZEMOVE 서브클래스를 설치한다(한글 조합 중 창 드래그 시 IME 끊김 방지, 서재에서 검증된 방법)
-- 닫기: `box`·`settings`는 숨김(prevent_close + hide). 메모 창은 파괴 + `is_open=false`. 종료는 트레이 "종료"뿐
+- 닫기: `box`·`settings`는 숨김(prevent_close + hide). 메모 창은 파괴 + `is_open=false`. **아무것도 안 적은 텍스트 메모(text가 공백뿐)를 닫으면 휴지통에도 남기지 않고 바로 지운다**(Rust `mark_closed`). 종료는 트레이 "종료"뿐
 - 시작: 인자에 `--hidden`이 있으면 메모함을 띄우지 않는다. `is_open`인 메모는 전부 복원
 - 단일 인스턴스: 두 번째 실행은 메모함을 보여 주고 끝
 - 트레이: 왼쪽 클릭 → 메모함, 메뉴 → 새 메모 / 메모함 열기 / 설정 / (구분선) / 종료. "새 메모"는 `create_note` + `open_note_window`
 - 전역 단축키: 설정값으로 등록. 눌리면 트레이 "새 메모"와 같은 동작
+
+## 이미지 메모
+
+메모는 `kind`로 갈린다. 텍스트 메모는 지금까지와 같고, 이미지 메모는 이미지 파일 하나를 창으로 띄우며 본문(html/text)은 "곁들인 텍스트"로 메모함에서만 보인다.
+
+```ts
+interface Note {
+  // …기존 필드 그대로…
+  kind: 'text' | 'image';        // serde default 'text' — 옛 파일 호환
+  image: {
+    file: string;                // 데이터 폴더 기준 상대 경로. 항상 "images/<id>.png"
+    name: string;                // 원본 파일명(붙여넣기면 "붙여넣은 이미지 2026-09-05 14-03.png"). 메모함 목록의 제목
+    w: number; h: number;        // 저장된(자른) 이미지의 픽셀 크기. 창 비율의 기준
+  } | null;                      // 텍스트 메모면 null
+}
+```
+
+- 이미지 파일은 데이터 폴더 `images/<id>.png`. 동기화 폴더에 같이 실린다. 크롭은 불러올 때 프런트가 canvas로 잘라 **자른 결과만** 저장한다(원본은 남기지 않는다).
+- 제목: 이미지 메모는 `image.name`. 검색은 `image.name` + `text`.
+- 이미지 메모 창: `note.window`가 null이면 가로 320(논리)·세로 `320 * h / w`. 이후 크기 변경은 프런트가 비율을 고정해 `setSize`하고 Rust가 평소처럼 `window`에 저장한다.
+- `purge_note`/`empty_trash`는 `images/<id>.png`도 지운다. 휴지통에 있는 동안은 남긴다.
+- 폴더 감시는 `images/`를 무시한다(메모 JSON이 곧 진실이고, 파일은 그 뒤에 따라온다).
+
+커맨드
+- `create_image_note(input: { png_base64: string; name: string; w: number; h: number; category_id?: string | null; favorite?: boolean }) -> Note` — 디코드해서 `images/<id>.png`에 쓰고 `kind:'image'` 메모를 만든다(창은 열지 않는다). base64는 data URL 접두사 없이.
+- `read_image_file(path: string) -> { data_url: string; name: string }` — 파일 선택 대화상자로 고른 원본을 읽어 data URL로 돌려준다(크롭 화면용). png/jpg/jpeg/gif/webp/bmp만. 20MB 초과면 에러.
+- 표시는 커스텀 프로토콜 **`memopin://image/<id>`** (Rust `register_uri_scheme_protocol("memopin")`). 현재 데이터 폴더의 `images/<id>.png`를 `image/png`으로 돌려준다. 없으면 404. Windows에서는 `http://memopin.localhost/image/<id>` 형태가 되므로 프런트는 `@tauri-apps/api/core`의 `convertFileSrc` 대신 **자체 헬퍼 `imageUrl(id)`** 로 플랫폼별 주소를 만든다(Windows: `http://memopin.localhost/image/<id>`, macOS: `memopin://image/<id>`). 캐시 무효화가 필요 없다(파일은 만들어진 뒤 바뀌지 않는다).
+- `tauri.conf.json` CSP는 null이라 프로토콜 주소가 막히지 않는다.
+
+## 첫 실행 안내 메모
+
+- 설정 `guide_seeded: boolean`(기본 false). 시작할 때 `guide_seeded`가 false이고 **살아 있는 메모가 하나도 없으면** 안내 메모 두 개를 만들고(`is_open: true`, 창 위치 null → OS 기본) `guide_seeded = true`로 저장한다. 지워도 다시 만들지 않는다.
+- 내용은 `src-tauri/src/guide.rs`에 상수로 둔다(html + text 둘 다). 색: 첫 번째 노랑 `#FFF4A3`, 두 번째 하늘 `#D6F0FA`.
