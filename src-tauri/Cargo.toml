@@ -1,6 +1,6 @@
 [package]
 name = "memopin"
-version = "0.1.0"
+version = "0.2.0"
 description = "메모핀 - 개인용 데스크톱 스티커 메모"
 edition = "2021"
 

@@ -14,7 +14,7 @@
  *     돌려도 메모 창 글자 크기는 그대로다.
  *  5. 선택은 배열이다. 하나면 지금까지와 똑같이 편집 칸이 열리고, 둘 이상이면 편집 칸 대신
  *     선택 요약이 나온다. 상태 전이는 순수 함수 `clickSelection`에 있다(테스트가 여기를 본다).
- *  6. 이미지 메모는 메모함에서만 만든다(파일 고르기 🖼 또는 붙여넣기 → 크롭 화면 → create_image_note).
+ *  6. 이미지 메모는 메모함에서만 만든다(파일 고르기 버튼 또는 붙여넣기 → 크롭 화면 → create_image_note).
  *     목록에서는 썸네일과 `image.name`으로 보이고, 편집 칸에서는 그림 아래에 곁들인 텍스트를 적는다.
  */
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -55,6 +55,9 @@ import './box.css';
 // ── 보기와 목록 계산(순수 함수. 테스트가 여기를 본다) ────────────────────────
 
 /** 사이드바가 고르는 보기. 카테고리는 `cat:<id>`로 적어 그대로 data 속성이 된다. */
+const PIC_SVG =
+  '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12.5V7a2.5 2.5 0 0 0-2.5-2.5h-11A2.5 2.5 0 0 0 4 7v10a2.5 2.5 0 0 0 2.5 2.5H13"/><path d="M4.5 16.5l4.5-4.5 3.5 3.5"/><path d="M18.5 15v6M15.5 18h6"/></svg>';
+
 export type View = 'all' | 'favorite' | 'unfiled' | 'trash' | `cat:${string}`;
 
 export function parseView(raw: string): View {
@@ -265,7 +268,8 @@ export function mountBox(root: HTMLElement): void {
     '<div class="tools">' +
     `<label class="search">${SEARCH_SVG}<input type="search" placeholder="메모 검색" aria-label="메모 검색"></label>` +
     '<button class="btn new" type="button" title="새 메모">＋</button>' +
-    '<button class="btn pic" type="button" title="이미지 메모">🖼</button>' +
+    // 이미지 메모 아이콘: 액자에 ＋(사용자가 고른 시안 E). 선 굵기·둥근 끝은 핀·별과 같다.
+    `<button class="btn pic" type="button" title="이미지 메모">${PIC_SVG}</button>` +
     '</div>' +
     '<div class="trashbar" hidden><button class="btn ghost sm empty-trash" type="button">휴지통 비우기</button></div>' +
     '<div class="hint" hidden></div><div class="err" hidden></div>' +

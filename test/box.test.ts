@@ -670,7 +670,7 @@ describe('mountBox', () => {
     expect(root.querySelector('.err')?.textContent).toBe('이미지 메모는 아직 복제할 수 없습니다');
   });
 
-  it('🖼는 파일을 골라 크롭 화면을 띄우고, 취소하면 편집 칸으로 돌아온다', async () => {
+  it('이미지 메모 버튼은 파일을 골라 크롭 화면을 띄우고, 취소하면 편집 칸으로 돌아온다', async () => {
     mountBox(root);
     await flush();
     dialog.open.mockResolvedValue('D:\\pic\\표지.png');
