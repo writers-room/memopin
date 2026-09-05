@@ -47,6 +47,7 @@ vi.mock('../src/api.ts', () => ({
 }));
 
 import * as api from '../src/api.ts';
+import { PALETTE } from '../src/ui/colors.ts';
 import { affectsNote, clampFontSize, fitSize, isOwnChange, mountNote } from '../src/ui/note.ts';
 
 const ID = 'n1';
@@ -466,6 +467,123 @@ describe('이미지 메모 창', () => {
     await flush();
     expect(document.documentElement.style.getPropertyValue('--n-bg')).toBe('#d2e7ff');
     expect(img.getAttribute('src')).toBe('memopin://image/n1');
+  });
+});
+
+describe('창 안 단축키', () => {
+  // 창 하나 = 메모 하나라 실제로는 mount가 한 번뿐이지만, 테스트에서는 앞선 mount가 걸어 둔
+  // document 리스너가 남는다. 그래서 호출 횟수가 아니라 "이 인자로 불렸는지"와 지금 root의
+  // 화면만 본다.
+  const press = (key: string, init: KeyboardEventInit = {}): KeyboardEvent => {
+    const e = new KeyboardEvent('keydown', {
+      key,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+      ...init,
+    });
+    document.dispatchEvent(e);
+    return e;
+  };
+
+  it('Ctrl+T는 항상 위를 켜고 기본 동작을 막는다', async () => {
+    await mount();
+    const e = press('t');
+    expect(api.updateNote).toHaveBeenCalledWith(ID, { always_on_top: true });
+    expect(root.classList.contains('pinned')).toBe(true);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('Ctrl+D는 즐겨찾기를 켠다', async () => {
+    await mount();
+    const e = press('d');
+    expect(api.updateNote).toHaveBeenCalledWith(ID, { favorite: true });
+    expect(root.classList.contains('favorite')).toBe(true);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('Ctrl+3은 팔레트 셋째 색으로 칠하고 디바운스로 저장한다', async () => {
+    vi.useFakeTimers();
+    await mount();
+    vi.mocked(api.updateNote).mockClear();
+
+    const green = PALETTE[2]![0];
+    press('3');
+    expect(document.documentElement.style.getPropertyValue('--n-bg')).toBe(green.toLowerCase());
+    expect(api.updateNote).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(200);
+    expect(api.updateNote).toHaveBeenCalledWith(ID, { color: green });
+  });
+
+  it('Ctrl+E는 메모함에서 보기다', async () => {
+    await mount();
+    const e = press('e');
+    expect(api.showBox).toHaveBeenCalled();
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('Ctrl+N은 ＋와 같이 같은 색·같은 카테고리로 만든다', async () => {
+    vi.mocked(api.getNote).mockResolvedValue(makeNote({ color: '#DDF5B0', category_id: 'c1' }));
+    await mount();
+    press('n');
+    await flush();
+    expect(api.createNote).toHaveBeenCalledWith({ color: '#DDF5B0', category_id: 'c1' });
+    expect(api.openNoteWindow).toHaveBeenCalledWith('n2');
+  });
+
+  it('Ctrl+W는 디바운스를 기다리지 않고 저장한 뒤 창을 닫는다', async () => {
+    vi.useFakeTimers();
+    await mount();
+    vi.mocked(api.updateNote).mockClear();
+
+    const ed = root.querySelector<HTMLElement>('.editor')!;
+    ed.innerHTML = '<p>아직 저장 전</p>';
+    ed.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(api.updateNote).not.toHaveBeenCalled();
+
+    press('w');
+    await flush();
+    expect(api.updateNote).toHaveBeenCalledWith(ID, {
+      html: '<p>아직 저장 전</p>',
+      text: '아직 저장 전',
+    });
+    expect(api.closeNoteWindow).toHaveBeenCalledWith(ID);
+  });
+
+  it('Shift·Alt가 섞이거나 IME 조합 중이면 흘려보낸다', async () => {
+    await mount();
+    press('t', { shiftKey: true });
+    press('d', { altKey: true });
+    press('t', { ctrlKey: false });
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 't', ctrlKey: true, bubbles: true, cancelable: true, isComposing: true }),
+    );
+    expect(api.updateNote).not.toHaveBeenCalled();
+    expect(root.classList.contains('pinned')).toBe(false);
+  });
+
+  it('이미지 메모에서도 Ctrl+2가 배경색을 바꾼다', async () => {
+    vi.useFakeTimers();
+    vi.mocked(api.getNote).mockResolvedValue(
+      makeNote({
+        kind: 'image',
+        html: '',
+        text: '',
+        image: { file: 'images/n1.png', name: '표지.png', w: 800, h: 600 },
+      }),
+    );
+    await mount();
+    vi.mocked(api.updateNote).mockClear();
+
+    const apricot = PALETTE[1]![0];
+    press('2');
+    expect(document.documentElement.style.getPropertyValue('--n-bg')).toBe(apricot.toLowerCase());
+    // 그림은 그대로다.
+    expect(root.querySelector<HTMLImageElement>('img.note-img')!.getAttribute('src')).toBe(
+      'memopin://image/n1',
+    );
+    vi.advanceTimersByTime(200);
+    expect(api.updateNote).toHaveBeenCalledWith(ID, { color: apricot });
   });
 });
 

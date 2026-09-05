@@ -29,6 +29,12 @@ base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 # 데이터 폴더 감시(동기화 클라이언트가 내려받은 파일을 알아채기 위해).
 notify = "8"
+# 전역 단축키 clip_text / clip_image가 읽는 클립보드. 리눅스의 wayland-data-control은
+# 쓰지 않으므로 기본 기능을 끄고 그림 읽기(image-data)만 켠다.
+arboard = { version = "3", default-features = false, features = ["image-data"] }
+# 클립보드 그림(RGBA)을 images/<id>.png로 저장할 때만 쓴다. image crate는 무겁고
+# 여기서는 인코딩 한 가지만 필요해서 png만 쓴다(이미 tauri 쪽 의존 트리에 있는 버전).
+png = "0.18"
 
 # Windows에서 한글 조합 중 창 이동/리사이즈 시작(WM_ENTERSIZEMOVE)을 가로채
 # wry의 강제 재포커스를 막기 위한 의존성. 이미 tauri/wry가 내부적으로 쓰는

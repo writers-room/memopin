@@ -31,9 +31,10 @@ interface Note {
   deleted_at: string | null; // 휴지통. null이면 살아 있음
 }
 interface Category { id: string; name: string; sort: number; created_at: string }
+type ShortcutId = 'new_note' | 'show_all' | 'hide_all' | 'toggle_box' | 'clip_text' | 'clip_image';
+interface ShortcutBinding { enabled: boolean; keys: string }  // keys는 tauri global-shortcut 표기, ""이면 지정 안 함
 interface Settings {
-  shortcut_enabled: boolean;   // 기본 true
-  shortcut: string;            // 기본 "CommandOrControl+Shift+N" (tauri global-shortcut 표기)
+  shortcuts: Record<ShortcutId, ShortcutBinding>;  // 전역 단축키. 기본값은 아래 "## 전역 단축키". 옛 파일의 shortcut/shortcut_enabled는 new_note로 옮겨 읽는다
   autostart: boolean;          // 기본 false. 켜면 "--hidden" 인자로 등록
   theme: 'system' | 'light' | 'dark';  // 기본 'system'. 메모함·설정 창만 해당
   default_color: string;       // 기본 "#FFF4A3"
@@ -70,7 +71,8 @@ interface Settings {
 
 설정
 - `get_settings() -> Settings`
-- `update_settings(patch: Partial<Settings>) -> Settings` — shortcut/shortcut_enabled/autostart는 즉시 적용(단축키 재등록, autostart 등록/해제). 실패하면 에러를 돌려주되 나머지 값은 저장
+- `update_settings(patch: Partial<Settings>) -> Settings` — shortcuts/autostart는 즉시 적용(단축키 전부 재등록, autostart 등록/해제). 단축키 등록 실패는 **에러가 아니라** 저장 후 `shortcut_errors`에 남긴다(autostart 실패만 에러)
+- `shortcut_errors() -> Partial<Record<ShortcutId, string>>` — 등록에 실패한 단축키와 한국어 이유. 없으면 빈 객체
 - `pick_data_dir() -> string | null` — 폴더 선택 대화상자
 - `set_data_dir(path: string | null) -> Settings` — 대상 폴더에 `notes/`가 없고 비어 있으면 현재 데이터를 복사, 이미 메모가 있으면 그것을 읽어 들인다(합치지 않는다). 그 뒤 store를 다시 로드하고 `store:changed`(kind all) 방송
 
@@ -129,3 +131,18 @@ interface Note {
 
 - 설정 `guide_seeded: boolean`(기본 false). 시작할 때 `guide_seeded`가 false이고 **살아 있는 메모가 하나도 없으면** 안내 메모 두 개를 만들고(`is_open: true`, 창 위치 null → OS 기본) `guide_seeded = true`로 저장한다. 지워도 다시 만들지 않는다.
 - 내용은 `src-tauri/src/guide.rs`에 상수로 둔다(html + text 둘 다). 색: 첫 번째 노랑 `#FFF4A3`, 두 번째 하늘 `#D6F0FA`.
+
+## 전역 단축키
+
+| id | 기본 조합 | 동작 |
+|---|---|---|
+| `new_note` | CommandOrControl+Shift+N | 새 메모(설정 기본색) 만들고 창 열기 |
+| `show_all` | CommandOrControl+Shift+Up | `is_open`인 메모 창을 전부 보이고(hidden이면 show) 앞으로 |
+| `hide_all` | CommandOrControl+Shift+Down | `is_open`인 메모 창을 전부 `hide()`. `is_open`은 그대로(재시작·show_all 때 돌아온다) |
+| `toggle_box` | CommandOrControl+Shift+M | 메모함이 보이고 포커스면 hide, 아니면 show + focus |
+| `clip_text` | CommandOrControl+Shift+V | 클립보드의 글로 새 메모(줄마다 `<p>`, HTML 이스케이프) + 창 열기. 글이 없으면 아무 일도 없음 |
+| `clip_image` | CommandOrControl+Shift+I | 클립보드의 그림으로 이미지 메모(크롭 없이 그대로, 이름 "붙여넣은 이미지 YYYY-MM-DD HH-mm.png") + 창 열기. 그림이 없으면 아무 일도 없음 |
+
+- Rust `shortcut.rs`가 설정의 enabled이고 keys가 비어 있지 않은 것을 전부 등록한다. 하나가 실패해도 나머지는 등록하고, 실패는 `shortcut_errors`로 조회한다.
+- 같은 조합을 두 id가 쓰면 앞의 것(표 순서)만 등록되고 뒤의 것은 "다른 동작과 같은 조합입니다"로 실패한다.
+- 창 안 단축키(전역 아님)는 프런트 고정: 메모 창 Ctrl+N 새 메모 / Ctrl+W 닫기 / Ctrl+T 항상 위 / Ctrl+D 즐겨찾기 / Ctrl+E 메모함에서 보기 / Ctrl+1~7 팔레트 첫 줄 색. 메모함 Ctrl+N 새 메모 / Ctrl+F 검색 / Esc 선택 해제·검색 지우기 / Ctrl+, 설정. 맥은 Ctrl 대신 Cmd.

@@ -17,6 +17,7 @@ import type {
   NotePatch,
   Settings,
   SettingsPatch,
+  ShortcutId,
   StoreChanged,
 } from './types.ts';
 
@@ -149,6 +150,15 @@ export function setDataDir(path: string | null): Promise<Settings> {
 
 export function appVersion(): Promise<string> {
   return invoke('app_version');
+}
+
+/**
+ * 전역 단축키 등록 실패 목록. 키는 ShortcutId, 값은 사용자에게 보여 줄 한국어 이유
+ * (예: "다른 프로그램이 이미 쓰는 조합입니다"). 실패한 것만 들어 있다.
+ * update_settings로 단축키를 바꾼 직후 불러 행마다 표시한다.
+ */
+export function shortcutErrors(): Promise<Partial<Record<ShortcutId, string>>> {
+  return invoke('shortcut_errors');
 }
 
 // ── 이벤트 ──────────────────────────────────────────────────────────────────

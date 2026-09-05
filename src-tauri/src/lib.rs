@@ -11,6 +11,7 @@ pub mod tray;
 pub mod watcher;
 pub mod windows;
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -26,6 +27,8 @@ pub struct AppState {
     pub settings: Mutex<Settings>,
     /// 데이터 폴더가 바뀌면 통째로 갈아 끼운다(옛 감시자는 떨어지면서 정리된다).
     pub watcher: Mutex<Option<DataWatcher>>,
+    /// 등록에 실패한 전역 단축키(id → 한국어 이유). `shortcut::apply`가 매번 통째로 채운다.
+    pub shortcut_errors: Mutex<BTreeMap<String, String>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -51,9 +54,14 @@ pub fn emit_settings_changed(app: &AppHandle, settings: &Settings) {
     let _ = app.emit("settings:changed", settings.clone());
 }
 
-/// 트레이 "새 메모"와 전역 단축키가 함께 쓰는 동작.
-/// 이 함수는 메인 스레드에서 불릴 수도 있으므로 창 생성 결과를 기다리지 않는다.
+/// 트레이 "새 메모"와 전역 단축키 `new_note`가 함께 쓰는 동작.
 pub fn new_note_from_system(app: &AppHandle) {
+    open_new_note(app, CreateNoteInput::default());
+}
+
+/// 메모를 만들고 곧바로 창까지 연다(트레이·전역 단축키 공용).
+/// 이 함수는 메인 스레드에서 불릴 수도 있으므로 창 생성 결과를 기다리지 않는다.
+pub fn open_new_note(app: &AppHandle, input: CreateNoteInput) {
     let state = app.state::<AppState>();
     let (color, font_size) = match state.settings.lock() {
         Ok(s) => (s.default_color.clone(), s.default_font_size),
@@ -66,7 +74,7 @@ pub fn new_note_from_system(app: &AppHandle) {
             return;
         };
         // 창 위치는 지정하지 않는다(null) — OS가 알아서 놓는다.
-        match store.create_note(CreateNoteInput::default(), &color, font_size) {
+        match store.create_note(input, &color, font_size) {
             Ok(note) => {
                 let _ = store.set_open(&note.id, true);
                 match store.get_note(&note.id) {
@@ -204,6 +212,7 @@ pub fn run() {
             commands::show_settings,
             commands::get_settings,
             commands::update_settings,
+            commands::shortcut_errors,
             commands::pick_data_dir,
             commands::set_data_dir,
             commands::app_version,
@@ -245,6 +254,7 @@ pub fn run() {
                 store: Mutex::new(store),
                 settings: Mutex::new(loaded),
                 watcher: Mutex::new(None),
+                shortcut_errors: Mutex::new(BTreeMap::new()),
             });
 
             match watcher::start(&handle, &data_dir) {
@@ -259,9 +269,8 @@ pub fn run() {
             if let Err(e) = tray::setup(&handle) {
                 eprintln!("{e}");
             }
-            if let Err(e) = shortcut::apply(&handle, &settings_for_shortcut) {
-                eprintln!("{e}");
-            }
+            // 실패한 것은 `shortcut_errors` 커맨드로 설정 화면이 읽어 간다.
+            shortcut::apply(&handle, &settings_for_shortcut);
 
             // 설정과 실제 등록 상태가 어긋나 있으면(재설치 등) 설정 쪽으로 맞춘다.
             {

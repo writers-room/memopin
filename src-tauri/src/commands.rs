@@ -1,6 +1,7 @@
 //! 프런트가 부르는 커맨드 전부. 이름·인자·반환은 `docs/contract.md`가 원본이다.
 //! 모든 에러 문자열은 사용자에게 그대로 보여 줄 수 있는 한국어다.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::Serialize;
@@ -281,8 +282,9 @@ pub fn get_settings(state: State<'_, AppState>) -> Res<Settings> {
     Ok(lock_settings(&state)?.clone())
 }
 
-/// shortcut / shortcut_enabled / autostart는 저장한 뒤 곧바로 적용한다.
-/// 적용에 실패해도 나머지 값은 저장하고, 에러 문자열만 돌려준다(계약).
+/// shortcuts / autostart는 저장한 뒤 곧바로 적용한다.
+/// 단축키 등록 실패는 에러가 아니다 — 저장은 그대로 두고 `shortcut_errors`에 남긴다(계약).
+/// autostart 실패만 에러로 돌려준다.
 #[tauri::command]
 pub fn update_settings(
     app: AppHandle,
@@ -295,15 +297,14 @@ pub fn update_settings(
         crate::apply_data_dir(&app, dir, window.label())?;
     }
 
-    let touched_shortcut = patch.shortcut_enabled.is_some() || patch.shortcut.is_some();
+    let touched_shortcuts = patch.shortcuts.is_some();
     let touched_autostart = patch.autostart.is_some();
     {
         let mut s = lock_settings(&state)?;
-        if let Some(v) = patch.shortcut_enabled {
-            s.shortcut_enabled = v;
-        }
-        if let Some(v) = patch.shortcut {
-            s.shortcut = v;
+        if let Some(mut v) = patch.shortcuts {
+            // 프런트가 여섯 개를 통째로 보내지만, 빠진 게 있으면 기본값으로 채운다.
+            settings::fill_missing_shortcuts(&mut v);
+            s.shortcuts = v;
         }
         if let Some(v) = patch.autostart {
             s.autostart = v;
@@ -335,21 +336,23 @@ pub fn update_settings(
     let current = lock_settings(&state)?.clone();
     emit_settings_changed(&app, &current);
 
-    let mut failure: Option<String> = None;
-    if touched_shortcut {
-        if let Err(e) = crate::shortcut::apply(&app, &current) {
-            failure = Some(e);
-        }
+    if touched_shortcuts {
+        crate::shortcut::apply(&app, &current);
     }
     if touched_autostart {
-        if let Err(e) = crate::apply_autostart(&app, current.autostart) {
-            failure = Some(failure.map_or(e.clone(), |prev| format!("{prev}\n{e}")));
-        }
+        crate::apply_autostart(&app, current.autostart)?;
     }
-    match failure {
-        Some(e) => Err(e),
-        None => Ok(current),
-    }
+    Ok(current)
+}
+
+/// 등록에 실패한 단축키만 담긴 `{ id: 이유 }`. 없으면 빈 객체.
+#[tauri::command]
+pub fn shortcut_errors(state: State<'_, AppState>) -> Res<BTreeMap<String, String>> {
+    state
+        .shortcut_errors
+        .lock()
+        .map(|errors| errors.clone())
+        .map_err(|_| "단축키 상태를 읽지 못했습니다.".to_string())
 }
 
 #[tauri::command]

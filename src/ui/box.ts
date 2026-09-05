@@ -259,13 +259,6 @@ export function mountBox(root: HTMLElement): void {
 
   // ── 뼈대 ──
   root.className = 'box-body';
-  // Ctrl+, → 설정. 트레이 메뉴 말고도 메모함 안에서 바로 열 수 있게(흔한 관례).
-  document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === ',') {
-      e.preventDefault();
-      void showSettings().catch((err) => console.error(err));
-    }
-  });
   root.innerHTML =
     '<nav class="side" aria-label="분류"></nav>' +
     '<div class="listpane">' +
@@ -630,6 +623,49 @@ export function mountBox(root: HTMLElement): void {
   searchInput.addEventListener('input', () => {
     query = searchInput.value;
     renderList();
+  });
+
+  // ── 창 안 단축키 ──
+  // Ctrl+,는 설정(트레이 메뉴 말고 메모함 안에서도 열게), Ctrl+N은 ＋와 같고, Ctrl+F는 검색칸이다.
+  // 셋 다 편집기에 포커스가 있어도 듣는다(편집기에는 이 조합들의 기본 동작이 없다).
+  // Esc는 편집기에 있으면 빠져나오기만 하고, 그 밖에서는 검색어 → 선택 차례로 지운다.
+  document.addEventListener('keydown', (e) => {
+    if (e.isComposing) return;
+    if (e.ctrlKey || e.metaKey) {
+      if (e.shiftKey || e.altKey || e.key.length !== 1) return;
+      switch (e.key.toLowerCase()) {
+        case ',':
+          e.preventDefault();
+          void showSettings().catch((err) => console.error(err));
+          return;
+        case 'n':
+          e.preventDefault();
+          void newNote();
+          return;
+        case 'f':
+          // 브라우저 찾기를 막고 검색칸을 잡는다. 이미 적어 둔 말은 통째로 골라 둔다.
+          e.preventDefault();
+          searchInput.focus();
+          searchInput.select();
+          return;
+        default:
+          return;
+      }
+    }
+    if (e.key !== 'Escape') return;
+    // 카테고리 이름을 인라인으로 고치는 중이면 그쪽 Esc가 임자다.
+    if (e.target instanceof HTMLElement && e.target.classList.contains('catinput')) return;
+    if (document.activeElement === editor.el) {
+      editor.el.blur();
+      return;
+    }
+    if (searchInput.value !== '') {
+      searchInput.value = '';
+      query = '';
+      renderList();
+      return;
+    }
+    if (sel.ids.length > 0) clearSelection();
   });
 
   pick<HTMLButtonElement>('.btn.new').addEventListener('click', () => {

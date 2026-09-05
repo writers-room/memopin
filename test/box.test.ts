@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Category, Note, Settings, StoreChanged } from '../src/types.ts';
+import { DEFAULT_SHORTCUTS } from '../src/types.ts';
 
 /** api.ts는 전부 invoke라 통째로 막는다. 창 라벨도 마찬가지. */
 const api = vi.hoisted(() => ({
@@ -69,8 +70,7 @@ function note(over: Partial<Note> = {}): Note {
 }
 
 const SETTINGS: Settings = {
-  shortcut_enabled: true,
-  shortcut: 'CommandOrControl+Shift+N',
+  shortcuts: structuredClone(DEFAULT_SHORTCUTS),
   autostart: false,
   theme: 'light',
   default_color: '#FFF4A3',
@@ -708,6 +708,81 @@ describe('mountBox', () => {
     await flush();
     expect(api.readImageFile).not.toHaveBeenCalled();
     expect(root.querySelector('.cropper')).toBeNull();
+  });
+
+  // 메모함도 document에 단축키를 건다. 테스트에서는 앞선 mountBox의 리스너가 남으므로
+  // 호출 횟수가 아니라 인자와 지금 root의 화면만 본다(앞선 것들은 떨어져 나간 DOM을 만진다).
+  const press = (key: string, init: KeyboardEventInit = {}): KeyboardEvent => {
+    const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
+    document.dispatchEvent(e);
+    return e;
+  };
+
+  it('Ctrl+N은 ＋와 같이 새 메모를 만든다', async () => {
+    mountBox(root);
+    await flush();
+    const made = note({ id: 'n9', text: '', html: '<p><br></p>' });
+    api.createNote.mockResolvedValue(made);
+    notes.push(made);
+
+    const e = press('n', { ctrlKey: true });
+    await flush();
+    expect(e.defaultPrevented).toBe(true);
+    expect(api.createNote).toHaveBeenCalledWith({});
+    expect(api.openNoteWindow).toHaveBeenCalledWith('n9');
+  });
+
+  it('Ctrl+F는 브라우저 찾기를 막고 검색칸을 잡는다', async () => {
+    mountBox(root);
+    await flush();
+    const search = root.querySelector<HTMLInputElement>('.search input')!;
+    search.value = '둘째';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const e = press('f', { ctrlKey: true });
+    expect(e.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(search);
+    expect(search.selectionStart).toBe(0);
+    expect(search.selectionEnd).toBe(search.value.length);
+  });
+
+  it('Esc는 검색어를 먼저 지우고, 그다음에 선택을 푼다', async () => {
+    mountBox(root);
+    await flush();
+    click(root, 'n1');
+    const search = root.querySelector<HTMLInputElement>('.search input')!;
+    search.value = '첫째';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect([...root.querySelectorAll('.list .item')].length).toBe(1);
+
+    press('Escape');
+    expect(search.value).toBe('');
+    expect([...root.querySelectorAll('.list .item')].length).toBe(2);
+    // 검색어를 지운 것뿐이라 선택은 그대로다.
+    expect(root.querySelector('.list .item.sel')?.getAttribute('data-id')).toBe('n1');
+
+    press('Escape');
+    expect(root.querySelector('.list .item.sel')).toBeNull();
+    expect(root.querySelector('.ed-empty')?.hasAttribute('hidden')).toBe(false);
+  });
+
+  it('편집기에 포커스가 있으면 Esc는 빠져나오기만 한다', async () => {
+    mountBox(root);
+    await flush();
+    click(root, 'n1');
+    const search = root.querySelector<HTMLInputElement>('.search input')!;
+    search.value = '첫째';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const editor = root.querySelector<HTMLElement>('.editor')!;
+    editor.focus();
+    expect(document.activeElement).toBe(editor);
+
+    press('Escape');
+    expect(document.activeElement).not.toBe(editor);
+    // 검색어와 선택은 그대로다.
+    expect(search.value).toBe('첫째');
+    expect(root.querySelector('.list .item.sel')?.getAttribute('data-id')).toBe('n1');
   });
 
   it('우클릭 복제는 같은 내용의 메모를 만들고 그것을 고른다(창은 열지 않는다)', async () => {

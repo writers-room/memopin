@@ -31,7 +31,7 @@ import {
 } from '../api.ts';
 import { attachFormatToolbar, createEditor, type Editor } from '../editor/index.ts';
 import type { Category, Note, NotePatch, StoreChanged } from '../types.ts';
-import { applyNoteColor } from './colors.ts';
+import { PALETTE, applyNoteColor } from './colors.ts';
 import { openContextMenu, type MenuAction } from './context-menu.ts';
 import './note.css';
 
@@ -272,15 +272,28 @@ async function start(root: HTMLElement, id: string): Promise<void> {
   }
 
   // ── 띠 버튼 ───────────────────────────────────────────────────────────────
+  // 버튼과 단축키가 같은 함수를 부른다(＋ = Ctrl+N, ✕ = Ctrl+W).
+  async function newNote(): Promise<void> {
+    try {
+      const made = await createNote({ color: note.color, category_id: note.category_id });
+      await openNoteWindow(made.id);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  /** 저장을 기다렸다가 창을 닫는다. 메모는 메모함에 남는다. */
+  async function closeSelf(): Promise<void> {
+    await flushAll();
+    try {
+      await closeNoteWindow(id);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   bar.querySelector<HTMLButtonElement>('.nb.new')!.addEventListener('click', () => {
-    void (async () => {
-      try {
-        const made = await createNote({ color: note.color, category_id: note.category_id });
-        await openNoteWindow(made.id);
-      } catch (e) {
-        fail(e);
-      }
-    })();
+    void newNote();
   });
 
   bar.querySelector<HTMLButtonElement>('.nb.pin')!.addEventListener('click', () => {
@@ -292,14 +305,49 @@ async function start(root: HTMLElement, id: string): Promise<void> {
   });
 
   bar.querySelector<HTMLButtonElement>('.nb.close')!.addEventListener('click', () => {
-    void (async () => {
-      await flushAll();
-      try {
-        await closeNoteWindow(id);
-      } catch (e) {
-        fail(e);
-      }
-    })();
+    void closeSelf();
+  });
+
+  // ── 창 안 단축키 ──────────────────────────────────────────────────────────
+  // 계약 "전역 단축키" 절 끝의 창 안 단축키다(전역이 아니라 이 창에서만 듣는다).
+  // Shift·Alt가 섞이면 내 것이 아니다(Ctrl+Shift+S는 편집기의 취소선). 편집기가 먼저 받는
+  // Ctrl+0·Ctrl+\는 여기서 건드리지 않는다. contenteditable에는 이 조합들의 기본 동작이 없지만
+  // WebView가 Ctrl+D·Ctrl+E·Ctrl+W를 가로챌 수 있어 언제나 preventDefault를 부른다.
+  document.addEventListener('keydown', (e) => {
+    if (e.isComposing) return;
+    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    // Ctrl+1~7 = 팔레트 첫 줄. 이미지 메모에서는 그림 뒤 여백만 바뀐다.
+    const slot = key.length === 1 ? '1234567'.indexOf(key) : -1;
+    if (slot >= 0) {
+      e.preventDefault();
+      setColor(PALETTE[slot]![0]);
+      return;
+    }
+    switch (key) {
+      case 'n':
+        e.preventDefault();
+        void newNote();
+        return;
+      case 'w':
+        e.preventDefault();
+        void closeSelf();
+        return;
+      case 't':
+        e.preventDefault();
+        void applyPatch({ always_on_top: !note.always_on_top });
+        return;
+      case 'd':
+        e.preventDefault();
+        void applyPatch({ favorite: !note.favorite });
+        return;
+      case 'e':
+        e.preventDefault();
+        void showBox().catch(fail);
+        return;
+      default:
+        return;
+    }
   });
 
   // 창이 사라지기 직전. 여기서는 기다릴 수 없으니 보내 두기만 한다.

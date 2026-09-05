@@ -72,10 +72,30 @@ export interface Category {
 
 export type Theme = 'system' | 'light' | 'dark';
 
+/** 전역 단축키 종류. 설정 화면의 행 순서이기도 하다. */
+export type ShortcutId = 'new_note' | 'show_all' | 'hide_all' | 'toggle_box' | 'clip_text' | 'clip_image';
+
+export interface ShortcutBinding {
+  enabled: boolean;
+  /** tauri global-shortcut 표기(예: "CommandOrControl+Shift+N"). 빈 문자열이면 지정 안 함 */
+  keys: string;
+}
+
+export const SHORTCUT_IDS: readonly ShortcutId[] = ['new_note', 'show_all', 'hide_all', 'toggle_box', 'clip_text', 'clip_image'];
+
+/** 기본 조합. Rust settings.rs의 기본값과 같아야 한다. */
+export const DEFAULT_SHORTCUTS: Record<ShortcutId, ShortcutBinding> = {
+  new_note: { enabled: true, keys: 'CommandOrControl+Shift+N' },
+  show_all: { enabled: true, keys: 'CommandOrControl+Shift+Up' },
+  hide_all: { enabled: true, keys: 'CommandOrControl+Shift+Down' },
+  toggle_box: { enabled: true, keys: 'CommandOrControl+Shift+M' },
+  clip_text: { enabled: true, keys: 'CommandOrControl+Shift+V' },
+  clip_image: { enabled: true, keys: 'CommandOrControl+Shift+I' },
+};
+
 export interface Settings {
-  shortcut_enabled: boolean;
-  /** tauri global-shortcut 표기. 기본 "CommandOrControl+Shift+N" */
-  shortcut: string;
+  /** 전역 단축키. 옛 settings.json의 shortcut/shortcut_enabled는 Rust가 new_note로 옮겨 읽는다 */
+  shortcuts: Record<ShortcutId, ShortcutBinding>;
   /** 켜면 "--hidden" 인자로 등록된다 */
   autostart: boolean;
   /** 메모함·설정 창만 해당 */

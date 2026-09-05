@@ -143,6 +143,17 @@ pub struct CreateImageNoteInput {
     pub favorite: Option<bool>,
 }
 
+/// 이미 PNG 바이트를 가진 쪽(클립보드에서 온 그림)의 입력.
+#[derive(Debug)]
+pub struct ImageNoteBytes {
+    pub bytes: Vec<u8>,
+    pub name: String,
+    pub w: u32,
+    pub h: u32,
+    pub category_id: Option<String>,
+    pub favorite: bool,
+}
+
 /// `update_note`의 patch. `window`만 "없음"과 "null"을 구분해야 해서 이중 Option이다
 /// (없으면 그대로 두고, null이면 위치를 지운다).
 #[derive(Debug, Default, Deserialize)]
@@ -466,10 +477,33 @@ impl Store {
         default_color: &str,
         default_font_size: u32,
     ) -> Result<Note, String> {
+        let bytes = decode_png_base64(&input.png_base64)?;
+        self.create_image_note_bytes(
+            ImageNoteBytes {
+                bytes,
+                name: input.name,
+                w: input.w,
+                h: input.h,
+                category_id: input.category_id,
+                favorite: input.favorite.unwrap_or(false),
+            },
+            default_color,
+            default_font_size,
+        )
+    }
+
+    /// PNG 바이트를 이미 가지고 있는 쪽(전역 단축키 `clip_image`)이 쓰는 길.
+    /// `create_image_note`도 base64를 풀어 여기로 온다.
+    pub fn create_image_note_bytes(
+        &mut self,
+        input: ImageNoteBytes,
+        default_color: &str,
+        default_font_size: u32,
+    ) -> Result<Note, String> {
         if input.w == 0 || input.h == 0 {
             return Err("이미지 크기를 읽지 못했습니다.".to_string());
         }
-        let bytes = decode_png_base64(&input.png_base64)?;
+        let bytes = input.bytes;
 
         let id = uuid::Uuid::new_v4().to_string();
         let file_name = format!("{id}.png");
@@ -483,7 +517,7 @@ impl Store {
             text: String::new(),
             color: default_color.to_string(),
             category_id: input.category_id,
-            favorite: input.favorite.unwrap_or(false),
+            favorite: input.favorite,
             list_pinned: false,
             always_on_top: false,
             font_size: default_font_size,

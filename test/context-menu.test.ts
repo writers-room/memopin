@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Category, Note, Settings } from '../src/types.ts';
+import { DEFAULT_SHORTCUTS } from '../src/types.ts';
 
 const api = vi.hoisted(() => ({
   getSettings: vi.fn(),
@@ -24,8 +25,7 @@ const {
 } = await import('../src/ui/context-menu.ts');
 
 const SETTINGS: Settings = {
-  shortcut_enabled: true,
-  shortcut: 'CommandOrControl+Shift+N',
+  shortcuts: structuredClone(DEFAULT_SHORTCUTS),
   autostart: false,
   theme: 'light',
   default_color: '#FFF4A3',

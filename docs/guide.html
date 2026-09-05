@@ -215,7 +215,7 @@ footer{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);font-si
     <div class="card"><h4>메모함 창 ✕</h4><p>창만 숨깁니다. 메모는 그대로이고 트레이 아이콘을 누르면 다시 나옵니다.</p></div>
     <div class="card"><h4>메모 창 ✕</h4><p>바탕화면에서만 치웁니다. 메모함에 남아 있고 언제든 다시 펼칠 수 있습니다. 아무것도 안 적은 빈 메모는 그냥 사라집니다.</p></div>
     <div class="card"><h4>완전히 끄기</h4><p>트레이 아이콘 우클릭 → <b>종료</b>. 펼쳐 둔 메모는 다음 실행 때 같은 자리에 돌아옵니다.</p></div>
-    <div class="card"><h4>어디서든 새 메모</h4><p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>. 다른 프로그램을 쓰는 중에도 새 메모가 뜹니다(설정에서 끄거나 바꿀 수 있습니다).</p></div>
+    <div class="card"><h4>어디서든 새 메모</h4><p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>. 다른 프로그램을 쓰는 중에도 새 메모가 뜹니다(설정에서 끄거나 바꿀 수 있습니다). 펼친 메모를 한 번에 숨기고 다시 보이는 단축키도 있습니다(<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd>/<kbd>↑</kbd>).</p></div>
   </div>
 
   <h2 id="note">메모 창</h2>
@@ -304,17 +304,49 @@ footer{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);font-si
       <tr><td>붙여넣기</td><td>다른 곳에서 복사한 글의 글꼴·색은 버리고 글자와 목록만 들어옵니다.</td></tr>
     </tbody>
   </table>
+  <h3>어디서든(전역)</h3>
   <table>
     <thead><tr><th>단축키</th><th>동작</th></tr></thead>
     <tbody>
-      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></td><td>새 메모(어느 프로그램에서든). 설정에서 조합을 바꿀 수 있습니다.</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></td><td>새 메모</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd></td><td>펼친 메모 모두 보이기</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd></td><td>펼친 메모 모두 숨기기</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd></td><td>메모함 열기 / 숨기기</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd></td><td>클립보드의 글로 새 메모</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd></td><td>클립보드의 그림으로 이미지 메모</td></tr>
+    </tbody>
+  </table>
+  <p class="meta">설정 → 단축키에서 조합을 바꾸거나 끌 수 있습니다.</p>
+
+  <h3>메모 창에서</h3>
+  <table>
+    <thead><tr><th>단축키</th><th>동작</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>같은 색·같은 카테고리로 새 메모</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>W</kbd></td><td>닫기(메모함에 남습니다)</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>T</kbd></td><td>항상 위에 고정 켜고 끄기</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>즐겨찾기 켜고 끄기</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>이 메모를 메모함에서 보기</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>1</kbd> ~ <kbd>7</kbd></td><td>색 바꾸기(팔레트 첫 줄 일곱 색)</td></tr>
       <tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd></td><td>굵게 / 기울임 / 밑줄</td></tr>
       <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>취소선</td></tr>
       <tr><td><kbd>Ctrl</kbd>+<kbd>\</kbd></td><td>서식 지우기</td></tr>
       <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>목록 안에서 들여쓰기 / 내어쓰기</td></tr>
       <tr><td><kbd>Ctrl</kbd>+휠 · <kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>글자 크기 · 원래대로 (메모 창과 메모함이 따로 기억합니다)</td></tr>
-      <tr><td><kbd>Ctrl</kbd>+<kbd>,</kbd></td><td>메모함에서 설정 열기</td></tr>
-      <tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>메모함에서 클립보드 이미지를 이미지 메모로</td></tr>
+    </tbody>
+  </table>
+
+  <h3>메모함에서</h3>
+  <table>
+    <thead><tr><th>단축키</th><th>동작</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>새 메모</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>검색칸으로</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>검색어 지우기, 그다음 선택 해제</td></tr>
+      <tr><td><kbd>Delete</kbd></td><td>고른 메모를 휴지통으로(휴지통에서는 완전히 삭제)</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td>고른 메모를 바탕화면에 펼치기</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>,</kbd></td><td>설정 열기</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>클립보드 이미지를 이미지 메모로</td></tr>
     </tbody>
   </table>
   <p class="meta">맥에서는 <kbd>Ctrl</kbd> 대신 <kbd>⌘</kbd>입니다.</p>
@@ -396,7 +428,7 @@ footer{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);font-si
   <table>
     <thead><tr><th>항목</th><th>설명</th></tr></thead>
     <tbody>
-      <tr><td>새 메모 전역 단축키</td><td>조합을 바꾸거나 끕니다. 다른 프로그램이 이미 쓰는 조합이면 등록에 실패했다고 알려 줍니다.</td></tr>
+      <tr><td>단축키</td><td>여섯 가지 전역 단축키를 켜고 끄고 조합을 바꿉니다. 다른 프로그램과 겹치면 그 행에 알려 줍니다.</td></tr>
       <tr><td>시작할 때 자동 실행</td><td>로그인하면 트레이에 조용히 올라오고 펼쳐 둔 메모만 복원합니다. 메모함은 열지 않습니다.</td></tr>
       <tr><td>메모함 테마</td><td>시스템 따라가기 · 라이트 · 다크. 메모 창은 메모 색이 곧 테마라 영향이 없습니다.</td></tr>
       <tr><td>새 메모 기본값</td><td>새 메모의 색과 글자 크기.</td></tr>
