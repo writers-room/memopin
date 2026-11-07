@@ -344,6 +344,71 @@ describe('createEditor', () => {
   });
 });
 
+describe('createEditor: IME 조합 중에는 DOM을 건드리지 않는다', () => {
+  const composing = (): InputEvent => new InputEvent('input', { isComposing: true, bubbles: true });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('조합 중 input은 onChange를 부르지 않고, compositionend 뒤 타이머에서 한 번 부른다', () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const ed = createEditor({ onChange });
+    document.body.appendChild(ed.el);
+    ed.el.dispatchEvent(composing());
+    ed.el.dispatchEvent(composing());
+    expect(onChange).not.toHaveBeenCalled();
+    ed.el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+    expect(onChange).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(0);
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('조합이 아닌 input은 바로 onChange를 부른다', () => {
+    const onChange = vi.fn();
+    const ed = createEditor({ onChange });
+    document.body.appendChild(ed.el);
+    ed.el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('compositionend 없이 blur하면 밀린 일을 정리한다', () => {
+    const onChange = vi.fn();
+    const ed = createEditor({ onChange });
+    document.body.appendChild(ed.el);
+    ed.el.dispatchEvent(composing());
+    expect(onChange).not.toHaveBeenCalled();
+    ed.el.dispatchEvent(new FocusEvent('blur'));
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('normalize도 조합이 끝난 뒤로 미룬다', () => {
+    vi.useFakeTimers();
+    const ed = createEditor();
+    document.body.appendChild(ed.el);
+    ed.el.innerHTML = '<ul><li class="task">가</li></ul>';
+    ed.el.dispatchEvent(composing());
+    expect(ed.el.querySelector('.cb')).toBeNull();
+    ed.el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+    expect(ed.el.querySelector('.cb')).toBeNull();
+    vi.advanceTimersByTime(0);
+    expect(ed.el.querySelector('li.task > .cb')).not.toBeNull();
+  });
+
+  it('타이머가 돌기 전에 destroy하면 onChange를 부르지 않는다', () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const ed = createEditor({ onChange });
+    document.body.appendChild(ed.el);
+    ed.el.dispatchEvent(composing());
+    ed.el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+    ed.destroy();
+    vi.advanceTimersByTime(10);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
 describe('attachFormatToolbar', () => {
   it('문서에 위젯 하나를 감춘 채로 붙이고 destroy로 걷는다', () => {
     const ed = createEditor();

@@ -254,7 +254,20 @@ export function createEditor(opts: EditorOptions = {}): Editor {
     }
   };
 
-  const onInput = (): void => {
+  // 한글 IME 조합 중에는 input 핸들러가 DOM을 건드리지 않는다. autoformat·normalize가 텍스트
+  // 노드를 바꾸거나 캐럿을 옮기면 IME 세션이 끊겨 Windows에서 "문자열 마무리"가 뜬다
+  // (서재/스토리시드 데스크톱 10-core.js의 input 핸들러와 같은 교훈).
+  // 조합 여부는 직접 만든 플래그가 아니라 InputEvent.isComposing으로 본다. 스토리시드에서
+  // 포커스를 잃고 compositionend가 오지 않아 자체 플래그가 true로 굳은 적이 있다.
+  // 아래 unsettled는 "밀린 일이 있다"만 표시하므로 굳어도 아무것도 막지 못한다.
+  // 밀린 일은 compositionend 뒤에 한다. setTimeout 0인 이유: macOS 한글 IME는 스페이스로
+  // 조합을 확정할 때 그 스페이스가 DOM에 들어가기 전에 compositionend를 쏴서, 바로 읽으면
+  // 저장본에서 스페이스가 빠졌다. compositionend가 끝내 안 오는 경우를 위해 blur에서도 정리한다.
+  let unsettled = false;
+  let settleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const settle = (): void => {
+    unsettled = false;
     if (splitting) {
       splitting = false;
       const li = caretBlock(el, 'li');
@@ -263,6 +276,22 @@ export function createEditor(opts: EditorOptions = {}): Editor {
     autoformat(el);
     normalize(el);
     emit();
+  };
+
+  const onInput = (e: Event): void => {
+    if ((e as InputEvent).isComposing) {
+      unsettled = true;
+      return;
+    }
+    settle();
+  };
+
+  const onCompositionEnd = (): void => {
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+      settleTimer = undefined;
+      if (unsettled) settle();
+    }, 0);
   };
 
   const onClick = (e: MouseEvent): void => {
@@ -360,12 +389,14 @@ export function createEditor(opts: EditorOptions = {}): Editor {
     sel.addRange(range);
   };
   const onBlur = (): void => {
+    if (unsettled) settle();
     if (getHtml() === EMPTY_HTML) el.innerHTML = '';
   };
 
   el.addEventListener('focus', onFocus);
   el.addEventListener('blur', onBlur);
   el.addEventListener('input', onInput);
+  el.addEventListener('compositionend', onCompositionEnd);
   el.addEventListener('click', onClick);
   el.addEventListener('keydown', onKeyDown);
   el.addEventListener('paste', onPaste);
@@ -396,6 +427,8 @@ export function createEditor(opts: EditorOptions = {}): Editor {
       el.removeEventListener('focus', onFocus);
       el.removeEventListener('blur', onBlur);
       el.removeEventListener('input', onInput);
+      el.removeEventListener('compositionend', onCompositionEnd);
+      clearTimeout(settleTimer);
       el.removeEventListener('click', onClick);
       el.removeEventListener('keydown', onKeyDown);
       el.removeEventListener('paste', onPaste);
