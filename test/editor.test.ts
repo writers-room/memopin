@@ -468,6 +468,64 @@ describe('autoformat: nbsp와 목록 변환', () => {
   });
 });
 
+describe('autoformat: 변환 뒤 캐럿 위치', () => {
+  // 트리거를 지운 뒤 빈 텍스트 노드가 남으면 li가 ["", br]이 되고 캐럿이 br 뒤로 가서
+  // 다음 한글 조합이 끊겼다. 캐럿은 남은 내용의 맨 앞이어야 한다.
+  const setup = (html: string, caretIn: (p: HTMLElement) => [Node, number]) => {
+    const ed = createEditor();
+    document.body.appendChild(ed.el);
+    ed.el.innerHTML = html;
+    const [node, offset] = caretIn(ed.el.firstElementChild as HTMLElement);
+    const range = document.createRange();
+    range.setStart(node, offset);
+    range.collapse(true);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    ed.el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    return ed;
+  };
+  const emptyTexts = (li: Element) =>
+    Array.from(li.childNodes).filter((n) => n.nodeType === Node.TEXT_NODE && !(n as Text).data);
+
+  it('빈 문단의 "- "는 li에 br만 남기고 캐럿은 (li, 0)', () => {
+    const ed = setup('<p>- </p>', (p) => [p.firstChild!, 2]);
+    const li = ed.el.querySelector('ul > li')!;
+    expect(emptyTexts(li)).toHaveLength(0);
+    expect(li.childNodes).toHaveLength(1);
+    expect(li.firstChild).toBeInstanceOf(HTMLBRElement);
+    const r = window.getSelection()!.getRangeAt(0);
+    expect(r.collapsed).toBe(true);
+    expect(r.startContainer).toBe(li);
+    expect(r.startOffset).toBe(0);
+    ed.destroy();
+  });
+
+  it('"1. " 뒤에 글자가 있으면 캐럿은 그 글자 앞', () => {
+    const ed = setup('<p>1. abc</p>', (p) => [p.firstChild!, 3]);
+    const li = ed.el.querySelector('ol > li')!;
+    expect(li.textContent).toBe('abc');
+    expect(emptyTexts(li)).toHaveLength(0);
+    const r = window.getSelection()!.getRangeAt(0);
+    expect(r.collapsed).toBe(true);
+    expect(r.startContainer).toBe(li.firstChild);
+    expect(r.startOffset).toBe(0);
+    ed.destroy();
+  });
+
+  it('"[] "는 li.task가 되고 캐럿은 .cb 바로 뒤', () => {
+    const ed = setup('<p>[] </p>', (p) => [p.firstChild!, 3]);
+    const li = ed.el.querySelector('ul > li.task')!;
+    const cb = li.firstElementChild!;
+    expect(cb.classList.contains('cb')).toBe(true);
+    const r = window.getSelection()!.getRangeAt(0);
+    expect(r.collapsed).toBe(true);
+    expect(r.startContainer).toBe(li);
+    expect(r.startOffset).toBe(Array.from(li.childNodes).indexOf(cb) + 1);
+    ed.destroy();
+  });
+});
+
 describe('convertListItemToBlock: 빈 체크박스에서 Enter·Backspace', () => {
   // 실제 앱에서 "[] " 뒤 Backspace를 누르면 체크박스가 동그라미 글머리로 변하던 버그.
   // execCommand('outdent')가 li를 그대로 두고 class만 지웠기 때문이라 DOM으로 직접 뺀다.

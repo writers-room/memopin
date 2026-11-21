@@ -164,19 +164,24 @@ function autoformat(root: HTMLElement): void {
     text.data = text.data.slice(cut);
     len -= cut;
     node = walker.nextNode();
+    // 비어 버린 텍스트 노드는 남기지 않는다(li에 ""와 br이 같이 남아 캐럿이 br 뒤로 갔다).
+    if (!text.data) text.remove();
   }
 
   const li = convertBlockToListItem(block, trigger.kind);
-  // 캐럿은 항목 맨 끝. 트리거는 공백을 친 순간에 걸리므로 보통 항목은 비어 있다.
+  // 캐럿은 항목에 남은 내용의 맨 앞. 캐럿이 br 뒤에 놓이면 다음 IME 조합이 끊긴다
+  // (실제 Edge + MS 한글 입력기에서 "- 한글"이 "ㅎㅏㄴ글"로 깨지는 것을 재현). 또 캐럿은
+  // 트리거 바로 뒤에 있었으므로 맨 끝이 아니라 남은 글자의 앞이 맞다.
   const sel = window.getSelection();
   if (sel) {
     const range = document.createRange();
-    if (li.childNodes.length === 1 && li.firstChild instanceof HTMLBRElement) {
-      range.setStart(li, 0);
+    const first = li.firstChild;
+    if (first && first.nodeType === Node.TEXT_NODE) {
+      range.setStart(first, 0);
     } else {
-      range.selectNodeContents(li);
+      range.setStart(li, 0);
     }
-    range.collapse(false);
+    range.collapse(true);
     sel.removeAllRanges();
     sel.addRange(range);
   }
