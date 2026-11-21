@@ -370,7 +370,7 @@ mod tests {
     #[test]
     fn disabled_and_empty_are_skipped() {
         let mut map = default_shortcuts();
-        set(&mut map, "show_all", false, "CommandOrControl+Shift+Up");
+        set(&mut map, "show_all", false, "CommandOrControl+Alt+Up");
         set(&mut map, "hide_all", true, "   ");
         let planned = plan(&map);
         assert_eq!(
@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn later_duplicate_fails() {
         let mut map = default_shortcuts();
-        set(&mut map, "hide_all", true, "Ctrl+Shift+N");
+        set(&mut map, "hide_all", true, "Ctrl+Alt+N");
         let planned = plan(&map);
         let new_note = planned.iter().find(|(id, _)| id == "new_note").unwrap();
         let hide_all = planned.iter().find(|(id, _)| id == "hide_all").unwrap();
@@ -416,7 +416,7 @@ mod tests {
 
         // 두 표기를 서로 다른 동작에 넣으면 중복으로 잡혀야 한다.
         let mut map = default_shortcuts();
-        set(&mut map, "hide_all", true, "CommandOrControl+Shift+ArrowUp");
+        set(&mut map, "hide_all", true, "CommandOrControl+Alt+ArrowUp");
         let planned = plan(&map);
         let hide_all = planned.iter().find(|(id, _)| id == "hide_all").unwrap();
         assert_eq!(hide_all.1.as_ref().unwrap_err(), ERR_DUPLICATE);

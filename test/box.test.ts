@@ -20,6 +20,7 @@ const api = vi.hoisted(() => ({
   deleteCategory: vi.fn(),
   openNoteWindow: vi.fn(),
   closeNoteWindow: vi.fn(),
+  showSettings: vi.fn(),
   onStoreChanged: vi.fn(),
   onSettingsChanged: vi.fn(),
   createImageNote: vi.fn(),
@@ -80,6 +81,7 @@ const SETTINGS: Settings = {
   favorite_colors: [],
   data_dir: null,
   guide_seeded: false,
+  tray_always_visible: false,
 };
 
 const CATS: Category[] = [
@@ -668,6 +670,17 @@ describe('mountBox', () => {
 
     expect(api.createNote).not.toHaveBeenCalled();
     expect(root.querySelector('.err')?.textContent).toBe('이미지 메모는 아직 복제할 수 없습니다');
+  });
+
+  it('톱니바퀴 버튼은 설정 창을 연다', async () => {
+    mountBox(root);
+    await flush();
+    api.showSettings.mockResolvedValue(undefined);
+
+    root.querySelector<HTMLButtonElement>('.btn.gear')!.click();
+    await flush();
+
+    expect(api.showSettings).toHaveBeenCalledTimes(1);
   });
 
   it('이미지 메모 버튼은 파일을 골라 크롭 화면을 띄우고, 취소하면 편집 칸으로 돌아온다', async () => {

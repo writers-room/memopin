@@ -13,6 +13,7 @@
 .set-body h5 .btn { letter-spacing: normal; text-transform: none; color: var(--ink-2); }
 .row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
 .row:last-child { border-bottom: 0; }
+.row[hidden] { display: none; } /* 맥에서 숨기는 윈도우 전용 행(트레이 아이콘 늘 표시) */
 .row .lbl { flex: 1; min-width: 0; }
 .row .lbl small { display: block; color: var(--ink-3); font-size: 12px; }
 .row select, .row input[type=text] {

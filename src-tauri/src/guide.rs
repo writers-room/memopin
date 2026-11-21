@@ -27,7 +27,7 @@ pub const GUIDE_1_HTML: &str = concat!(
     "<li>\"- \" 글머리, \"1. \" 숫자, \"[] \" 체크박스</li>",
     "<li class=\"task\">글자를 끌어 고르면 굵게·기울임·밑줄·취소선</li>",
     "</ul>",
-    "<p>어디서든 <b>Ctrl+Shift+N</b>으로 새 메모를 띄웁니다.</p>",
+    "<p>어디서든 <b>Ctrl+Alt+N</b>으로 새 메모를 띄웁니다.</p>",
 );
 
 pub const GUIDE_1_TEXT: &str = concat!(
@@ -39,7 +39,7 @@ pub const GUIDE_1_TEXT: &str = concat!(
     "줄 첫머리에 이렇게 치면 서식이 됩니다.\n",
     "\"- \" 글머리, \"1. \" 숫자, \"[] \" 체크박스\n",
     "[ ] 글자를 끌어 고르면 굵게·기울임·밑줄·취소선\n",
-    "어디서든 Ctrl+Shift+N으로 새 메모를 띄웁니다.",
+    "어디서든 Ctrl+Alt+N으로 새 메모를 띄웁니다.",
 );
 
 pub const GUIDE_2_HTML: &str = concat!(

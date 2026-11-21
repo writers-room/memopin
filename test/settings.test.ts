@@ -33,6 +33,7 @@ const SETTINGS: Settings = {
   favorite_colors: [],
   data_dir: 'D:\\Drive\\memopin',
   guide_seeded: false,
+  tray_always_visible: false,
 };
 
 const key = (over: Partial<KeyboardEventInit> & { key: string }) => ({
@@ -163,9 +164,9 @@ describe('mountSettings', () => {
     await flush();
     const rows = [...root.querySelectorAll<HTMLElement>('.row[data-shortcut]')];
     expect(rows.map((r) => r.dataset.shortcut)).toEqual([...SHORTCUT_IDS]);
-    expect(capOf('new_note').value).toBe(displayShortcut('CommandOrControl+Shift+N', false));
-    expect(capOf('show_all').value).toBe(displayShortcut('CommandOrControl+Shift+Up', false));
-    expect(capOf('clip_image').value).toBe(displayShortcut('CommandOrControl+Shift+I', false));
+    expect(capOf('new_note').value).toBe(displayShortcut('CommandOrControl+Alt+N', false));
+    expect(capOf('show_all').value).toBe(displayShortcut('CommandOrControl+Alt+Up', false));
+    expect(capOf('clip_image').value).toBe(displayShortcut('CommandOrControl+Alt+I', false));
     expect(swOf('hide_all').classList.contains('on')).toBe(true);
     expect(rowOf('new_note').textContent).toContain('어떤 프로그램을 쓰는 중에도');
     expect(api.shortcutErrors).toHaveBeenCalled();
@@ -202,8 +203,8 @@ describe('mountSettings', () => {
   it('다른 행과 같은 조합은 저장하지 않고 어느 행인지 말한다', async () => {
     mountSettings(root);
     await flush();
-    // hide_all에 new_note의 기본 조합(Ctrl+Shift+N)을 넣어 본다.
-    press('hide_all', { key: 'n', ctrlKey: true, shiftKey: true });
+    // hide_all에 new_note의 기본 조합(Ctrl+Alt+N)을 넣어 본다.
+    press('hide_all', { key: 'n', ctrlKey: true, altKey: true });
     await flush();
     expect(api.updateSettings).not.toHaveBeenCalled();
     expect(msgOf('hide_all').textContent).toContain("'새 메모'과 같은 조합입니다.");
@@ -225,7 +226,7 @@ describe('mountSettings', () => {
     press('show_all', { key: 'Escape' });
     await flush();
     expect(api.updateSettings).not.toHaveBeenCalled();
-    expect(capOf('show_all').value).toBe(displayShortcut('CommandOrControl+Shift+Up', false));
+    expect(capOf('show_all').value).toBe(displayShortcut('CommandOrControl+Alt+Up', false));
   });
 
   it('토글은 그 행만 바꿔 전체 맵으로 보낸다', async () => {
@@ -236,7 +237,7 @@ describe('mountSettings', () => {
     expect(api.updateSettings).toHaveBeenCalledWith({
       shortcuts: {
         ...DEFAULT_SHORTCUTS,
-        clip_image: { enabled: false, keys: 'CommandOrControl+Shift+I' },
+        clip_image: { enabled: false, keys: 'CommandOrControl+Alt+I' },
       },
     });
     expect(swOf('clip_image').classList.contains('on')).toBe(false);
@@ -268,7 +269,7 @@ describe('mountSettings', () => {
     [...root.querySelectorAll('button')].find((b) => b.textContent === '기본값으로')!.click();
     await flush();
     expect(api.updateSettings).toHaveBeenCalledWith({ shortcuts: DEFAULT_SHORTCUTS });
-    expect(capOf('new_note').value).toBe(displayShortcut('CommandOrControl+Shift+N', false));
+    expect(capOf('new_note').value).toBe(displayShortcut('CommandOrControl+Alt+N', false));
   });
 
   it('토글은 곧바로 저장한다', async () => {
@@ -278,6 +279,39 @@ describe('mountSettings', () => {
     await flush();
     expect(api.updateSettings).toHaveBeenCalledWith({ autostart: true });
     expect(root.querySelector<HTMLElement>('.sw2[aria-label="자동 실행"]')!.classList.contains('on')).toBe(true);
+  });
+
+  it('트레이 아이콘 늘 표시는 자동 실행 바로 아래에 있고 곧바로 저장한다', async () => {
+    mountSettings(root);
+    await flush();
+    const sw = root.querySelector<HTMLButtonElement>('.sw2[aria-label="트레이 아이콘 늘 표시"]')!;
+    const row = sw.closest<HTMLElement>('.row')!;
+    expect(row.hidden).toBe(false); // jsdom은 맥이 아니다
+    expect(row.textContent).toContain('윈도우 11');
+    // 자동 실행 행 → 그 .msg → 이 행 순서
+    const autostartRow = root.querySelector('.sw2[aria-label="자동 실행"]')!.closest('.row')!;
+    expect(autostartRow.nextElementSibling!.nextElementSibling).toBe(row);
+    expect(sw.classList.contains('on')).toBe(false);
+    sw.click();
+    await flush();
+    expect(api.updateSettings).toHaveBeenCalledWith({ tray_always_visible: true });
+    expect(sw.classList.contains('on')).toBe(true);
+  });
+
+  it('트레이 항목을 못 찾았다는 에러는 그 행 아래에 보여 준다', async () => {
+    mountSettings(root);
+    await flush();
+    api.updateSettings.mockRejectedValueOnce('윈도우 작업 표시줄 설정에서 메모핀 아이콘을 찾지 못했습니다(윈도우 11에서만 됩니다).');
+    // 저장은 됐으므로 다시 읽은 값은 켜져 있다.
+    api.getSettings.mockResolvedValue({ ...SETTINGS, tray_always_visible: true });
+    const sw = root.querySelector<HTMLButtonElement>('.sw2[aria-label="트레이 아이콘 늘 표시"]')!;
+    sw.click();
+    await flush();
+    const msg = sw.closest<HTMLElement>('.row')!.nextElementSibling as HTMLElement;
+    expect(msg.hidden).toBe(false);
+    expect(msg.classList.contains('bad')).toBe(true);
+    expect(msg.textContent).toContain('윈도우 11에서만');
+    expect(sw.classList.contains('on')).toBe(true);
   });
 
   it('메모함 글자 크기는 새 메모 기본값과 따로 저장한다', async () => {

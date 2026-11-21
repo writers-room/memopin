@@ -284,7 +284,8 @@ pub fn get_settings(state: State<'_, AppState>) -> Res<Settings> {
 
 /// shortcuts / autostart는 저장한 뒤 곧바로 적용한다.
 /// 단축키 등록 실패는 에러가 아니다 — 저장은 그대로 두고 `shortcut_errors`에 남긴다(계약).
-/// autostart 실패만 에러로 돌려준다.
+/// autostart 실패만 에러로 돌려준다. tray_always_visible을 켰는데 윈도우 쪽 항목을 못 찾았을
+/// 때도 에러로 알린다(저장은 된다 — 다음 시작 때 다시 해 본다).
 #[tauri::command]
 pub fn update_settings(
     app: AppHandle,
@@ -299,6 +300,7 @@ pub fn update_settings(
 
     let touched_shortcuts = patch.shortcuts.is_some();
     let touched_autostart = patch.autostart.is_some();
+    let touched_tray = patch.tray_always_visible.is_some();
     {
         let mut s = lock_settings(&state)?;
         if let Some(mut v) = patch.shortcuts {
@@ -330,6 +332,9 @@ pub fn update_settings(
         if let Some(v) = patch.guide_seeded {
             s.guide_seeded = v;
         }
+        if let Some(v) = patch.tray_always_visible {
+            s.tray_always_visible = v;
+        }
         settings::save(&app, &s)?;
     }
 
@@ -341,6 +346,16 @@ pub fn update_settings(
     }
     if touched_autostart {
         crate::apply_autostart(&app, current.autostart)?;
+    }
+    if touched_tray {
+        let found = crate::tray::apply_always_visible(&app, current.tray_always_visible);
+        // 끌 때는 항목이 없으면 할 일도 없다. 켰는데 없으면 윈도우 10이거나 아직 등록 전이다.
+        if !found && current.tray_always_visible {
+            return Err(
+                "윈도우 작업 표시줄 설정에서 메모핀 아이콘을 찾지 못했습니다(윈도우 11에서만 됩니다)."
+                    .to_string(),
+            );
+        }
     }
     Ok(current)
 }

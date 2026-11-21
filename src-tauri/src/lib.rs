@@ -269,6 +269,10 @@ pub fn run() {
             if let Err(e) = tray::setup(&handle) {
                 eprintln!("{e}");
             }
+            // 꺼져 있으면 건드리지 않는다(사용자가 윈도우 설정에서 정한 그대로 둔다).
+            if settings_for_shortcut.tray_always_visible {
+                tray::apply_always_visible_on_startup(&handle);
+            }
             // 실패한 것은 `shortcut_errors` 커맨드로 설정 화면이 읽어 간다.
             shortcut::apply(&handle, &settings_for_shortcut);
 

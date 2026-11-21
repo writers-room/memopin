@@ -43,6 +43,8 @@ interface Settings {
   recent_colors: string[];     // 최근 쓴 색. 최신이 앞, 중복 없음, 최대 10. 기본 팔레트 14색은 넣지 않는다
   favorite_colors: string[];   // 즐겨찾는 색. 최대 10. 우클릭 메뉴 팔레트의 ☆로 넣고 뺀다
   data_dir: string | null;     // null = 기본 폴더
+  tray_always_visible: boolean; // 기본 false. 윈도우 11에서 트레이 아이콘을 작업 표시줄 ^ 안에 숨기지 않는다(아래 "트레이 아이콘 늘 표시")
+  // shortcuts_rev: number — Rust 전용(단축키 기본값 이전 판). 응답에 실려 오지만 프런트는 쓰지 않고 patch로도 받지 않는다
 }
 ```
 
@@ -71,7 +73,8 @@ interface Settings {
 
 설정
 - `get_settings() -> Settings`
-- `update_settings(patch: Partial<Settings>) -> Settings` — shortcuts/autostart는 즉시 적용(단축키 전부 재등록, autostart 등록/해제). 단축키 등록 실패는 **에러가 아니라** 저장 후 `shortcut_errors`에 남긴다(autostart 실패만 에러)
+- `update_settings(patch: Partial<Settings>) -> Settings` — shortcuts/autostart는 즉시 적용(단축키 전부 재등록, autostart 등록/해제). 단축키 등록 실패는 **에러가 아니라** 저장 후 `shortcut_errors`에 남긴다(autostart 실패만 에러). tray_always_visible도 즉시 적용하고, 켰는데 윈도우 쪽 항목을 못 찾으면 저장은 한 채 에러를 돌려준다
+- 트레이 아이콘 늘 표시: 공식 API가 없어 `HKCU\Control Panel\NotifyIconSettings\<숫자>` 가운데 `ExecutablePath`가 지금 실행 파일인 항목의 `IsPromoted`(1/0)를 쓴다. 윈도우 설정 → 작업 표시줄 → "기타 시스템 트레이 아이콘"과 같은 값이다. 문서에 없는 자리이고 윈도우 11에만 있으며, 사용자가 윈도우 설정에서 바꾸면 그쪽이 이긴다. 값을 바꾼 뒤에는 트레이 아이콘을 내렸다 올려 탐색기가 다시 읽게 한다. 시작할 때 켜져 있으면 다시 적용하는데, 항목은 아이콘이 등록된 뒤 탐색기가 만들므로 별도 스레드에서 2초 간격으로 여섯 번까지 본다. 꺼져 있으면 건드리지 않는다
 - `shortcut_errors() -> Partial<Record<ShortcutId, string>>` — 등록에 실패한 단축키와 한국어 이유. 없으면 빈 객체
 - `pick_data_dir() -> string | null` — 폴더 선택 대화상자
 - `set_data_dir(path: string | null) -> Settings` — 대상 폴더에 `notes/`가 없고 비어 있으면 현재 데이터를 복사, 이미 메모가 있으면 그것을 읽어 들인다(합치지 않는다). 그 뒤 store를 다시 로드하고 `store:changed`(kind all) 방송
@@ -136,12 +139,14 @@ interface Note {
 
 | id | 기본 조합 | 동작 |
 |---|---|---|
-| `new_note` | CommandOrControl+Shift+N | 새 메모(설정 기본색) 만들고 창 열기 |
-| `show_all` | CommandOrControl+Shift+Up | `is_open`인 메모 창을 전부 보이고(hidden이면 show) 앞으로 |
-| `hide_all` | CommandOrControl+Shift+Down | `is_open`인 메모 창을 전부 `hide()`. `is_open`은 그대로(재시작·show_all 때 돌아온다) |
-| `toggle_box` | CommandOrControl+Shift+M | 메모함이 보이고 포커스면 hide, 아니면 show + focus |
-| `clip_text` | CommandOrControl+Shift+V | 클립보드의 글로 새 메모(줄마다 `<p>`, HTML 이스케이프) + 창 열기. 글이 없으면 아무 일도 없음 |
-| `clip_image` | CommandOrControl+Shift+I | 클립보드의 그림으로 이미지 메모(크롭 없이 그대로, 이름 "붙여넣은 이미지 YYYY-MM-DD HH-mm.png") + 창 열기. 그림이 없으면 아무 일도 없음 |
+| `new_note` | CommandOrControl+Alt+N | 새 메모(설정 기본색) 만들고 창 열기 |
+| `show_all` | CommandOrControl+Alt+Up | `is_open`인 메모 창을 전부 보이고(hidden이면 show) 앞으로 |
+| `hide_all` | CommandOrControl+Alt+Down | `is_open`인 메모 창을 전부 `hide()`. `is_open`은 그대로(재시작·show_all 때 돌아온다) |
+| `toggle_box` | CommandOrControl+Alt+M | 메모함이 보이고 포커스면 hide, 아니면 show + focus |
+| `clip_text` | CommandOrControl+Alt+V | 클립보드의 글로 새 메모(줄마다 `<p>`, HTML 이스케이프) + 창 열기. 글이 없으면 아무 일도 없음 |
+| `clip_image` | CommandOrControl+Alt+I | 클립보드의 그림으로 이미지 메모(크롭 없이 그대로, 이름 "붙여넣은 이미지 YYYY-MM-DD HH-mm.png") + 창 열기. 그림이 없으면 아무 일도 없음 |
+
+- 0.2.x까지의 기본값은 Ctrl+Shift(같은 글자)였다. 크롬과 겹쳐(시크릿 창·서식 없이 붙여넣기·개발자 도구·프로필 메뉴) 옮겼다. 설정 `shortcuts_rev`가 0인 settings.json은 시작할 때 한 번, 옛 기본값 그대로인 칸만 새 기본값으로 바꾸고(`enabled`는 그대로, 사람이 고른 조합·빈 칸은 그대로) `shortcuts_rev = 1`로 저장한다. 새 설정 파일은 1로 시작한다.
 
 - Rust `shortcut.rs`가 설정의 enabled이고 keys가 비어 있지 않은 것을 전부 등록한다. 하나가 실패해도 나머지는 등록하고, 실패는 `shortcut_errors`로 조회한다.
 - 같은 조합을 두 id가 쓰면 앞의 것(표 순서)만 등록되고 뒤의 것은 "다른 동작과 같은 조합입니다"로 실패한다.

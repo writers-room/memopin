@@ -77,20 +77,24 @@ export type ShortcutId = 'new_note' | 'show_all' | 'hide_all' | 'toggle_box' | '
 
 export interface ShortcutBinding {
   enabled: boolean;
-  /** tauri global-shortcut 표기(예: "CommandOrControl+Shift+N"). 빈 문자열이면 지정 안 함 */
+  /** tauri global-shortcut 표기(예: "CommandOrControl+Alt+N"). 빈 문자열이면 지정 안 함 */
   keys: string;
 }
 
 export const SHORTCUT_IDS: readonly ShortcutId[] = ['new_note', 'show_all', 'hide_all', 'toggle_box', 'clip_text', 'clip_image'];
 
-/** 기본 조합. Rust settings.rs의 기본값과 같아야 한다. */
+/**
+ * 기본 조합. Rust settings.rs의 기본값과 같아야 한다.
+ * 0.2.x까지는 Ctrl+Shift였는데 크롬(시크릿 창·서식 없이 붙여넣기·개발자 도구)과 겹쳐 옮겼다.
+ * 옛 기본값을 그대로 쓰던 settings.json은 Rust가 시작할 때 한 번 옮긴다(`migrate_shortcuts`).
+ */
 export const DEFAULT_SHORTCUTS: Record<ShortcutId, ShortcutBinding> = {
-  new_note: { enabled: true, keys: 'CommandOrControl+Shift+N' },
-  show_all: { enabled: true, keys: 'CommandOrControl+Shift+Up' },
-  hide_all: { enabled: true, keys: 'CommandOrControl+Shift+Down' },
-  toggle_box: { enabled: true, keys: 'CommandOrControl+Shift+M' },
-  clip_text: { enabled: true, keys: 'CommandOrControl+Shift+V' },
-  clip_image: { enabled: true, keys: 'CommandOrControl+Shift+I' },
+  new_note: { enabled: true, keys: 'CommandOrControl+Alt+N' },
+  show_all: { enabled: true, keys: 'CommandOrControl+Alt+Up' },
+  hide_all: { enabled: true, keys: 'CommandOrControl+Alt+Down' },
+  toggle_box: { enabled: true, keys: 'CommandOrControl+Alt+M' },
+  clip_text: { enabled: true, keys: 'CommandOrControl+Alt+V' },
+  clip_image: { enabled: true, keys: 'CommandOrControl+Alt+I' },
 };
 
 export interface Settings {
@@ -113,6 +117,8 @@ export interface Settings {
   data_dir: string | null;
   /** 첫 실행 안내 메모를 만들었는지. 지워도 다시 만들지 않는다 */
   guide_seeded: boolean;
+  /** 트레이 아이콘을 작업 표시줄의 ^ 안에 숨기지 않고 늘 보이게(윈도우 11). 기본 false */
+  tray_always_visible: boolean;
 }
 
 /** `create_note`의 입력. 빠진 값은 설정 기본값으로 채워진다. */

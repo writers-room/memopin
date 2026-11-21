@@ -23,13 +23,60 @@ pub const SHORTCUT_IDS: [&str; 6] = [
 /// id별 기본 조합. `src/types.ts`의 `DEFAULT_SHORTCUTS`와 글자 그대로 같아야 한다.
 pub fn default_shortcut_keys(id: &str) -> &'static str {
     match id {
-        "new_note" => "CommandOrControl+Shift+N",
-        "show_all" => "CommandOrControl+Shift+Up",
-        "hide_all" => "CommandOrControl+Shift+Down",
-        "toggle_box" => "CommandOrControl+Shift+M",
-        "clip_text" => "CommandOrControl+Shift+V",
-        "clip_image" => "CommandOrControl+Shift+I",
+        "new_note" => "CommandOrControl+Alt+N",
+        "show_all" => "CommandOrControl+Alt+Up",
+        "hide_all" => "CommandOrControl+Alt+Down",
+        "toggle_box" => "CommandOrControl+Alt+M",
+        "clip_text" => "CommandOrControl+Alt+V",
+        "clip_image" => "CommandOrControl+Alt+I",
         _ => "",
+    }
+}
+
+/// 0.2.x까지의 기본 조합. Ctrl+Shift+N(시크릿 창)·V(서식 없이 붙여넣기)·I(개발자 도구)·
+/// M(프로필 메뉴)이 크롬과 겹쳐서 Ctrl+Alt로 옮겼다. 이 목록은 `migrate_shortcuts`만 쓴다.
+const OLD_SHORTCUT_KEYS_REV0: [(&str, &str); 6] = [
+    ("new_note", "CommandOrControl+Shift+N"),
+    ("show_all", "CommandOrControl+Shift+Up"),
+    ("hide_all", "CommandOrControl+Shift+Down"),
+    ("toggle_box", "CommandOrControl+Shift+M"),
+    ("clip_text", "CommandOrControl+Shift+V"),
+    ("clip_image", "CommandOrControl+Shift+I"),
+];
+
+/// 지금 판의 단축키 기본값 판 번호. 새 설정 파일은 이 값으로 시작한다.
+pub const SHORTCUTS_REV: u32 = 1;
+
+/// 옛 기본값을 그대로 쓰던 사람만 새 기본값으로 옮긴다. 바꿨다는 뜻이면 true(저장해야 한다).
+///
+/// settings.json은 단축키 여섯 개를 통째로 담고 있어서 기본값만 바꾸면 기존 사용자에게는
+/// 아무 일도 없다. 그래서 한 번만 옮긴다 — 손대지 않은 칸(옛 기본값 그대로)만 바꾸고,
+/// 사람이 고른 조합과 비워 둔 칸은 그대로 둔다. `enabled`도 그대로다.
+/// 옮긴 뒤 `shortcuts_rev`를 올려 두므로, 나중에 일부러 Ctrl+Shift+N을 고른 사람은
+/// 되돌리지 않는다. 비교는 shortcut.rs의 중복 판정처럼 파싱된 조합으로 한다
+/// ("Ctrl+Shift+N"과 "CommandOrControl+Shift+N"은 윈도우에서 같은 조합이다).
+pub fn migrate_shortcuts(settings: &mut Settings) -> bool {
+    if settings.shortcuts_rev >= SHORTCUTS_REV {
+        return false;
+    }
+    for (id, old) in OLD_SHORTCUT_KEYS_REV0 {
+        let Some(binding) = settings.shortcuts.get_mut(id) else {
+            continue;
+        };
+        if same_combo(&binding.keys, old) {
+            binding.keys = default_shortcut_keys(id).to_string();
+        }
+    }
+    settings.shortcuts_rev = SHORTCUTS_REV;
+    true
+}
+
+fn same_combo(a: &str, b: &str) -> bool {
+    use std::str::FromStr;
+    use tauri_plugin_global_shortcut::Shortcut;
+    match (Shortcut::from_str(a.trim()), Shortcut::from_str(b.trim())) {
+        (Ok(a), Ok(b)) => a.id() == b.id(),
+        _ => false,
     }
 }
 
@@ -102,6 +149,11 @@ pub struct Settings {
     pub data_dir: Option<String>,
     /// 첫 실행 안내 메모를 만들었는지. 한 번 true가 되면 지워도 다시 만들지 않는다.
     pub guide_seeded: bool,
+    /// 단축키 기본값 이전(`migrate_shortcuts`)을 어디까지 했는지. 파일에 없으면 0.
+    pub shortcuts_rev: u32,
+    /// 트레이 아이콘을 작업 표시줄의 ^ 안에 숨기지 않고 늘 보이게 할지(윈도우 11).
+    /// 기본 false — 묻지 않고 남의 작업 표시줄을 바꾸지 않는다. 적용은 tray.rs.
+    pub tray_always_visible: bool,
 }
 
 /// 파일에서 읽히는 모양. 빠진 칸은 serde default로, 옛 칸(`shortcut`·`shortcut_enabled`)은
@@ -134,6 +186,10 @@ struct RawSettings {
     data_dir: Option<String>,
     #[serde(default)]
     guide_seeded: bool,
+    #[serde(default)]
+    shortcuts_rev: u32,
+    #[serde(default)]
+    tray_always_visible: bool,
 }
 
 impl From<RawSettings> for Settings {
@@ -169,6 +225,8 @@ impl From<RawSettings> for Settings {
             favorite_colors: raw.favorite_colors,
             data_dir: raw.data_dir,
             guide_seeded: raw.guide_seeded,
+            shortcuts_rev: raw.shortcuts_rev,
+            tray_always_visible: raw.tray_always_visible,
         }
     }
 }
@@ -186,6 +244,8 @@ impl Default for Settings {
             favorite_colors: Vec::new(),
             data_dir: None,
             guide_seeded: false,
+            shortcuts_rev: SHORTCUTS_REV,
+            tray_always_visible: false,
         }
     }
 }
@@ -215,6 +275,8 @@ pub struct SettingsPatch {
     pub data_dir: Option<Option<String>>,
     #[serde(default)]
     pub guide_seeded: Option<bool>,
+    #[serde(default)]
+    pub tray_always_visible: Option<bool>,
 }
 
 fn double_option<'de, T, D>(de: D) -> Result<Option<Option<T>>, D::Error>
@@ -244,7 +306,14 @@ pub fn load<R: Runtime>(app: &AppHandle<R>) -> Settings {
     };
     match std::fs::read_to_string(&path) {
         Ok(text) => match serde_json::from_str::<Settings>(&text) {
-            Ok(s) => s,
+            Ok(mut s) => {
+                if migrate_shortcuts(&mut s) {
+                    if let Err(e) = save(app, &s) {
+                        eprintln!("{e}");
+                    }
+                }
+                s
+            }
             Err(e) => {
                 eprintln!("설정 파일을 읽지 못해 기본값으로 시작합니다: {e}");
                 Settings::default()
@@ -350,12 +419,12 @@ mod tests {
     fn default_shortcuts_match_types_ts() {
         let s = Settings::default();
         let expect = [
-            ("new_note", "CommandOrControl+Shift+N"),
-            ("show_all", "CommandOrControl+Shift+Up"),
-            ("hide_all", "CommandOrControl+Shift+Down"),
-            ("toggle_box", "CommandOrControl+Shift+M"),
-            ("clip_text", "CommandOrControl+Shift+V"),
-            ("clip_image", "CommandOrControl+Shift+I"),
+            ("new_note", "CommandOrControl+Alt+N"),
+            ("show_all", "CommandOrControl+Alt+Up"),
+            ("hide_all", "CommandOrControl+Alt+Down"),
+            ("toggle_box", "CommandOrControl+Alt+M"),
+            ("clip_text", "CommandOrControl+Alt+V"),
+            ("clip_image", "CommandOrControl+Alt+I"),
         ];
         assert_eq!(s.shortcuts.len(), expect.len());
         for (id, keys) in expect {
@@ -387,7 +456,7 @@ mod tests {
         assert!(!new_note.enabled);
         assert_eq!(
             s.shortcuts.get("clip_image").unwrap().keys,
-            "CommandOrControl+Shift+I"
+            "CommandOrControl+Alt+I"
         );
         assert_eq!(s.shortcuts.len(), SHORTCUT_IDS.len());
         // 저장할 때는 옛 칸을 다시 쓰지 않는다.
@@ -409,7 +478,7 @@ mod tests {
         assert_eq!(s.shortcuts.get("new_note").unwrap().keys, "Alt+1");
         assert_eq!(
             s.shortcuts.get("show_all").unwrap().keys,
-            "CommandOrControl+Shift+Up"
+            "CommandOrControl+Alt+Up"
         );
         assert_eq!(s.shortcuts.len(), SHORTCUT_IDS.len());
     }
@@ -430,5 +499,83 @@ mod tests {
                 keys: String::new()
             })
         );
+    }
+
+    fn binding(enabled: bool, keys: &str) -> ShortcutBinding {
+        ShortcutBinding {
+            enabled,
+            keys: keys.to_string(),
+        }
+    }
+
+    /// 0.2.x의 settings.json: shortcuts_rev가 없고 여섯 개가 전부 옛 기본값이다.
+    fn rev0_settings() -> Settings {
+        let mut s: Settings = serde_json::from_str("{}").unwrap();
+        for (id, keys) in OLD_SHORTCUT_KEYS_REV0 {
+            s.shortcuts.insert(id.to_string(), binding(true, keys));
+        }
+        assert_eq!(s.shortcuts_rev, 0);
+        s
+    }
+
+    #[test]
+    fn migration_moves_old_defaults_to_new_defaults() {
+        let mut s = rev0_settings();
+        assert!(migrate_shortcuts(&mut s));
+        for id in SHORTCUT_IDS {
+            assert_eq!(s.shortcuts[id], binding(true, default_shortcut_keys(id)), "{id}");
+        }
+        assert_eq!(s.shortcuts_rev, SHORTCUTS_REV);
+        // 두 번째에는 아무것도 하지 않는다.
+        assert!(!migrate_shortcuts(&mut s));
+    }
+
+    /// 사람이 고른 조합과 비워 둔 칸은 그대로. 표기가 달라도 같은 조합이면 옛 기본값으로 본다.
+    #[test]
+    fn migration_keeps_customized_and_empty_bindings() {
+        let mut s = rev0_settings();
+        s.shortcuts.insert("new_note".into(), binding(true, "Alt+1"));
+        s.shortcuts.insert("hide_all".into(), binding(false, ""));
+        s.shortcuts.insert("toggle_box".into(), binding(true, "Ctrl+Shift+M"));
+        assert!(migrate_shortcuts(&mut s));
+        assert_eq!(s.shortcuts["new_note"], binding(true, "Alt+1"));
+        assert_eq!(s.shortcuts["hide_all"], binding(false, ""));
+        assert_eq!(s.shortcuts["toggle_box"], binding(true, "CommandOrControl+Alt+M"));
+        assert_eq!(s.shortcuts["show_all"], binding(true, "CommandOrControl+Alt+Up"));
+    }
+
+    /// 꺼 두었지만 조합은 옛 기본값인 칸: 조합만 옮기고 꺼진 상태는 그대로.
+    #[test]
+    fn migration_keeps_enabled_flag_of_disabled_old_default() {
+        let mut s = rev0_settings();
+        s.shortcuts
+            .insert("clip_text".into(), binding(false, "CommandOrControl+Shift+V"));
+        assert!(migrate_shortcuts(&mut s));
+        assert_eq!(s.shortcuts["clip_text"], binding(false, "CommandOrControl+Alt+V"));
+    }
+
+    /// 이미 옮긴 뒤(rev 1)에 일부러 Ctrl+Shift+N을 고른 사람은 되돌리지 않는다.
+    #[test]
+    fn migration_skips_already_migrated_settings() {
+        let text = r#"{
+            "shortcuts_rev": 1,
+            "shortcuts": { "new_note": { "enabled": true, "keys": "CommandOrControl+Shift+N" } }
+        }"#;
+        let mut s: Settings = serde_json::from_str(text).unwrap();
+        assert!(!migrate_shortcuts(&mut s));
+        assert_eq!(s.shortcuts["new_note"].keys, "CommandOrControl+Shift+N");
+    }
+
+    /// 새로 만든 설정은 이미 새 기본값이라 옮길 것이 없다. 트레이 고정은 꺼진 채로 시작한다.
+    #[test]
+    fn new_settings_start_migrated_and_tray_not_pinned() {
+        let mut s = Settings::default();
+        assert_eq!(s.shortcuts_rev, SHORTCUTS_REV);
+        assert!(!migrate_shortcuts(&mut s));
+        assert!(!s.tray_always_visible);
+        let old: Settings = serde_json::from_str("{}").unwrap();
+        assert!(!old.tray_always_visible);
+        let p: SettingsPatch = serde_json::from_str(r#"{"tray_always_visible": true}"#).unwrap();
+        assert_eq!(p.tray_always_visible, Some(true));
     }
 }

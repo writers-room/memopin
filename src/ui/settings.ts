@@ -277,6 +277,13 @@ export function mountSettings(root: HTMLElement): void {
   const autostartSwitch = makeSwitch('자동 실행');
   autostartRow.el.append(autostartSwitch);
 
+  // 윈도우 11 전용. 공식 API가 없어 Rust가 윈도우 설정의 레지스트리 값을 대신 고친다(tray.rs).
+  // 항목을 못 찾으면(윈도우 10, 아직 아이콘 등록 전) 저장은 되고 에러로 돌아와 행 아래에 뜬다.
+  const trayRow = makeRow(root, '트레이 아이콘 늘 표시', '작업 표시줄의 ^ 안에 숨기지 않고 늘 보이게 합니다(윈도우 11)');
+  const traySwitch = makeSwitch('트레이 아이콘 늘 표시');
+  trayRow.el.append(traySwitch);
+  trayRow.el.hidden = mac; // 맥 메뉴 막대에는 숨는 칸이 없다
+
   const themeRow = makeRow(root, '메모함 테마');
   const themeSelect = makeSelect('메모함 테마', [
     ['system', '시스템 따라가기'],
@@ -385,6 +392,7 @@ export function mountSettings(root: HTMLElement): void {
     shortcuts = cloneShortcuts(settings.shortcuts);
     renderShortcuts();
     setSwitch(autostartSwitch, settings.autostart);
+    setSwitch(traySwitch, settings.tray_always_visible);
     themeSelect.value = settings.theme;
     colorSelect.value = settings.default_color;
     // 프리셋에 없는 색이 저장돼 있으면 select가 비어 버린다. 그때는 항목을 하나 더 만든다.
@@ -544,6 +552,10 @@ export function mountSettings(root: HTMLElement): void {
 
   autostartSwitch.addEventListener('click', () => {
     void save({ autostart: !settings?.autostart }, autostartRow);
+  });
+
+  traySwitch.addEventListener('click', () => {
+    void save({ tray_always_visible: !settings?.tray_always_visible }, trayRow);
   });
 
   themeSelect.addEventListener('change', () => {

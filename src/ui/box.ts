@@ -58,6 +58,10 @@ import './box.css';
 const PIC_SVG =
   '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12.5V7a2.5 2.5 0 0 0-2.5-2.5h-11A2.5 2.5 0 0 0 4 7v10a2.5 2.5 0 0 0 2.5 2.5H13"/><path d="M4.5 16.5l4.5-4.5 3.5 3.5"/><path d="M18.5 15v6M15.5 18h6"/></svg>';
 
+// 설정 톱니바퀴. 이미지 메모 아이콘과 같은 선 굵기로 그린다.
+const GEAR_SVG =
+  `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 10.0 L19.1 10.6 L21.5 10.7 L21.5 13.3 L19.1 13.4 L18.9 14.0 L18.3 15.4 L18.0 16.0 L19.7 17.8 L17.8 19.7 L16.0 18.0 L15.4 18.3 L14.0 18.9 L13.4 19.1 L13.3 21.5 L10.7 21.5 L10.6 19.1 L10.0 18.9 L8.6 18.3 L8.0 18.0 L6.2 19.7 L4.3 17.8 L6.0 16.0 L5.7 15.4 L5.1 14.0 L4.9 13.4 L2.5 13.3 L2.5 10.7 L4.9 10.6 L5.1 10.0 L5.7 8.6 L6.0 8.0 L4.3 6.2 L6.2 4.3 L8.0 6.0 L8.6 5.7 L10.0 5.1 L10.6 4.9 L10.7 2.5 L13.3 2.5 L13.4 4.9 L14.0 5.1 L15.4 5.7 L16.0 6.0 L17.8 4.3 L19.7 6.2 L18.0 8.0 L18.3 8.6Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+
 export type View = 'all' | 'favorite' | 'unfiled' | 'trash' | `cat:${string}`;
 
 export function parseView(raw: string): View {
@@ -270,6 +274,7 @@ export function mountBox(root: HTMLElement): void {
     '<button class="btn new" type="button" title="새 메모">＋</button>' +
     // 이미지 메모 아이콘: 액자에 ＋(사용자가 고른 시안 E). 선 굵기·둥근 끝은 핀·별과 같다.
     `<button class="btn pic" type="button" title="이미지 메모">${PIC_SVG}</button>` +
+    `<button class="btn gear" type="button" title="설정 (Ctrl+,)">${GEAR_SVG}</button>` +
     '</div>' +
     '<div class="trashbar" hidden><button class="btn ghost sm empty-trash" type="button">휴지통 비우기</button></div>' +
     '<div class="hint" hidden></div><div class="err" hidden></div>' +
@@ -674,6 +679,9 @@ export function mountBox(root: HTMLElement): void {
 
   pick<HTMLButtonElement>('.btn.new').addEventListener('click', () => {
     void newNote();
+  });
+  pick<HTMLButtonElement>('.btn.gear').addEventListener('click', () => {
+    void showSettings().catch(fail);
   });
   pick<HTMLButtonElement>('.empty-trash').addEventListener('click', () => {
     if (!window.confirm('휴지통의 메모를 전부 완전히 삭제할까요?\n되돌릴 수 없습니다.')) return;

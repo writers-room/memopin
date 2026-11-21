@@ -35,6 +35,7 @@ const SETTINGS: Settings = {
   favorite_colors: [],
   data_dir: null,
   guide_seeded: false,
+  tray_always_visible: false,
 };
 
 const CATS: Category[] = [{ id: 'c1', name: '집필', sort: 0, created_at: '2026-09-01T00:00:00Z' }];
