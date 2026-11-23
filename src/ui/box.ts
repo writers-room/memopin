@@ -274,7 +274,6 @@ export function mountBox(root: HTMLElement): void {
     '<button class="btn new" type="button" title="새 메모">＋</button>' +
     // 이미지 메모 아이콘: 액자에 ＋(사용자가 고른 시안 E). 선 굵기·둥근 끝은 핀·별과 같다.
     `<button class="btn pic" type="button" title="이미지 메모">${PIC_SVG}</button>` +
-    `<button class="btn gear" type="button" title="설정 (Ctrl+,)">${GEAR_SVG}</button>` +
     '</div>' +
     '<div class="trashbar" hidden><button class="btn ghost sm empty-trash" type="button">휴지통 비우기</button></div>' +
     '<div class="hint" hidden></div><div class="err" hidden></div>' +
@@ -442,6 +441,23 @@ export function mountBox(root: HTMLElement): void {
     return input;
   }
 
+  // 설정은 자주 쓰지 않으니 사이드바 맨 아래, 휴지통 밑 구분선 아래에 둔다(사용자가 고른 시안 A).
+  function sideSettings(): DocumentFragment {
+    const frag = document.createDocumentFragment();
+    const sep = document.createElement('div');
+    sep.className = 'sep';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cat settings';
+    const key = /mac/i.test(navigator.platform || navigator.userAgent || '') ? '⌘,' : 'Ctrl+,';
+    b.innerHTML = `${GEAR_SVG}<span class="name">설정</span><span class="n">${key}</span>`;
+    b.addEventListener('click', () => {
+      void showSettings().catch(fail);
+    });
+    frag.append(sep, b);
+    return frag;
+  }
+
   function renderSide(): void {
     side.innerHTML = '';
     side.append(catRow('all', '전체'), catRow('favorite', '즐겨찾기'), catRow('unfiled', '미분류'));
@@ -492,7 +508,7 @@ export function mountBox(root: HTMLElement): void {
 
     const grow = document.createElement('div');
     grow.className = 'grow';
-    side.append(grow, catRow('trash', '휴지통'));
+    side.append(grow, catRow('trash', '휴지통'), sideSettings());
 
     if (catEdit) {
       const input = side.querySelector<HTMLInputElement>('.catinput');
@@ -679,9 +695,6 @@ export function mountBox(root: HTMLElement): void {
 
   pick<HTMLButtonElement>('.btn.new').addEventListener('click', () => {
     void newNote();
-  });
-  pick<HTMLButtonElement>('.btn.gear').addEventListener('click', () => {
-    void showSettings().catch(fail);
   });
   pick<HTMLButtonElement>('.empty-trash').addEventListener('click', () => {
     if (!window.confirm('휴지통의 메모를 전부 완전히 삭제할까요?\n되돌릴 수 없습니다.')) return;

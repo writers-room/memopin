@@ -25,6 +25,9 @@
 .cat.on .n { color: var(--accent); }
 .cat.add { color: var(--ink-3); font-size: 13px; }
 .side .grow { flex: 1; min-height: 12px; }
+.side .sep { height: 1px; flex: none; background: var(--line); margin: 6px 4px; }
+.cat.settings .ico { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.cat.settings .n { font-size: 11px; }
 .side .catinput {
   width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--accent); border-radius: 6px;
   background: var(--surface); color: var(--ink); outline: none; min-width: 0;
@@ -47,10 +50,8 @@
 /* 검색칸과 같은 높이의 정사각형. 글리프는 가운데. */
 .tools .btn { flex: none; }
 .tools .btn.new { width: 34px; height: auto; padding: 0; justify-content: center; font-size: 20px; line-height: 1; }
-.tools .btn.pic,
-.tools .btn.gear { width: 34px; height: auto; padding: 0; justify-content: center; }
-.tools .btn.pic .ico,
-.tools .btn.gear .ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tools .btn.pic { width: 34px; height: auto; padding: 0; justify-content: center; }
+.tools .btn.pic .ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .search {
   /* min-width:0 — input의 기본 폭(20ch)이 flex 최소 폭이 되어 오른쪽 버튼을 밀어내 잘리게 했다. */
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px;

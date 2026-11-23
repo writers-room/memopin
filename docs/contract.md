@@ -81,7 +81,7 @@ interface Settings {
 
 기타
 - `app_version() -> string`
-- 업데이트 확인·설치는 프런트가 `@tauri-apps/plugin-updater`로 직접 한다
+- 업데이트 확인·설치는 프런트가 `@tauri-apps/plugin-updater`로 직접 한다. 메모함 창이 켜지고 5초 뒤 한 번 확인해, 새 버전이 있으면 묻지 않고 설치·재시작한다(`src/updater.ts`). 설정의 '업데이트 확인'은 수동용으로 남는다
 
 ## 이벤트 (`app.emit`, 모든 창에)
 

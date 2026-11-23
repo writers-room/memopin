@@ -672,12 +672,20 @@ describe('mountBox', () => {
     expect(root.querySelector('.err')?.textContent).toBe('이미지 메모는 아직 복제할 수 없습니다');
   });
 
-  it('톱니바퀴 버튼은 설정 창을 연다', async () => {
+  it('사이드바 맨 아래 설정 줄은 휴지통 다음에 있고 설정 창을 연다', async () => {
     mountBox(root);
     await flush();
     api.showSettings.mockResolvedValue(undefined);
 
-    root.querySelector<HTMLButtonElement>('.btn.gear')!.click();
+    expect(root.querySelector('.tools .gear, .tools [title^="설정"]')).toBeNull();
+    const side = root.querySelector('.side')!;
+    const settings = side.lastElementChild as HTMLButtonElement;
+    expect(settings.matches('.cat.settings')).toBe(true);
+    expect(settings.querySelector('.name')?.textContent).toBe('설정');
+    expect(settings.previousElementSibling?.matches('.sep')).toBe(true);
+    expect(settings.previousElementSibling?.previousElementSibling?.getAttribute('data-view')).toBe('trash');
+
+    settings.click();
     await flush();
 
     expect(api.showSettings).toHaveBeenCalledTimes(1);

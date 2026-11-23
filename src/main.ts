@@ -14,6 +14,13 @@ async function main() {
   if (label === 'box') {
     const { mountBox } = await import('./ui/box.ts');
     mountBox(root);
+    // 메모함 창은 앱이 켜질 때 (숨긴 채로) 한 번 뜬다. 그때 업데이트를 확인한다.
+    // 로그인 직후 자동 실행이면 네트워크가 늦게 붙을 수 있어 조금 기다린다. 개발 서버에서는 하지 않는다.
+    if (!import.meta.env.DEV) {
+      setTimeout(() => {
+        void import('./updater.ts').then((m) => m.autoUpdate());
+      }, 5000);
+    }
   } else if (label === 'settings') {
     const { mountSettings } = await import('./ui/settings.ts');
     mountSettings(root);
